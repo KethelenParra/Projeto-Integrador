@@ -1,16 +1,11 @@
-# vision_app_3d
+# vision_app
 
-A new Flutter project.
+O projeto propõe o desenvolvimento de um aplicativo que, ao ler um código QR, exibe um vídeo do inseto que fornece uma audiodescrição detalhada do inseto. O objetivo é auxiliar pessoas com deficiência visual e auditiva a reconhecerem diferentes espécies de insetos, e destinado para crianças com o objetivo no aprendizado.
 
-## Getting Started
+## Participantes do Projeto
+- Kethelen Parra
+- Erick Meneses
+- Gabriel Mussatto
+- Hugo Valuar
+- João Pedro de Oliveira
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
