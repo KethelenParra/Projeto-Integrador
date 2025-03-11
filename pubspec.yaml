@@ -42,9 +42,9 @@ dependencies:
   animated_text_kit: ^4.2.2
   flutter_launcher_icons: ^0.14.1
 
-flutter_launcher_icons:
-  android: "launcher_icon"
-  image_path: "lib/assets/icon/logo.png"
+flutter_icons:
+  android: true
+  image_path: "assets/icon/logo.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
  
 
