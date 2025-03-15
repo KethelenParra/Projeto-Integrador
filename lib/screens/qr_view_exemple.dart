@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'insect_details_screen.dart';
 import 'package:vision_app_3d/screens/inserct.dart'; // Importar a classe Insect e o mapeamento insectData
 
@@ -14,17 +15,21 @@ class QRViewExample extends StatefulWidget {
 class _QRViewExampleState extends State<QRViewExample> {
   final MobileScannerController controller = MobileScannerController();
   final FlutterTts _flutterTts = FlutterTts(); // Instância do TTS
+  final stt.SpeechToText _speechToText = stt.SpeechToText();
   bool isScanCompleted = false;
+  bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
     _speakInstructions(); // Lê o texto assim que a tela é aberta
+    _initSpeech();
   }
 
   @override
   void dispose() {
     _flutterTts.stop(); // Para o TTS ao sair da tela
+    _speechToText.stop();
     super.dispose();
   }
 
@@ -34,6 +39,39 @@ class _QRViewExampleState extends State<QRViewExample> {
     await _flutterTts.speak(
       "Aponte o celular para o QR Code. Coloque o QR Code na área demarcada. A leitura será feita automaticamente.",
     );
+  }
+
+  Future<void> _initSpeech() async{
+    bool available = await _speechToText.initialize(
+      onStatus: (status) {
+        if (status == 'done'){
+          setState(() => _isListening = false);
+        }
+      },
+      onError: (error) => print("Erro: $error"),
+    );
+
+    if(available){
+      _startListening();
+    }
+  }
+
+  void _startListening() async{
+    if(!_isListening){
+      await _speechToText.listen(
+        onResult: (result){
+          if (result.recognizedWords.toLowerCase() == "voltar"){
+            _navigateBackToHome();
+          }
+        },
+        localeId: "pt-BR",
+      );
+    }
+  }
+
+  void _navigateBackToHome(){
+    _speechToText.stop(); // Para a escuta antes de navegar
+    Navigator.pop(context); // Volta para a tela inicial
   }
 
   void closeScreen() {
@@ -57,7 +95,6 @@ class _QRViewExampleState extends State<QRViewExample> {
           onPressed: () {
             _flutterTts.stop(); // Interrompe qualquer leitura
             Navigator.pop(context); // Volta para a tela anterior
-            _speakInstructions(); // Reproduz as instruções ao retornar
           },
         ),
       ),
