@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vision_app_3d/screens/inserct.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
+import 'quiz_screen.dart';
 
 class InsectDetailsScreen extends StatefulWidget {
   final Insect insect;
@@ -153,6 +154,35 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
                       },
                     ),
                   ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  if(_videoController.value.isPlaying){
+                    _videoController.pause();
+                  }
+                  _videoController.seekTo(Duration.zero);
+                  
+                  setState(() {
+                    _currentScrollPosition = 0;
+                  });
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => QuizScreen(insectName: widget.insect.name),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+                child: const Text(
+                  'Fazer Quiz',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
               ),
             ),
