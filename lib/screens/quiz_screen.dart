@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'questions.dart';
 
 class QuizScreen extends StatefulWidget {
   final String insectName;
 
-  const QuizScreen({super.key, required this.insectName});
+  const QuizScreen({Key? key, required this.insectName}) : super(key: key);
 
   @override
   _QuizScreenState createState() => _QuizScreenState();
@@ -16,220 +18,63 @@ class _QuizScreenState extends State<QuizScreen> {
   bool _isAnswered = false;
   List<int?> _answers = List.filled(5, null);
 
-  final Map<String, List<Map<String, dynamic>>> _questions = {
-    'Escorpião': [
-      {
-        'question': 'Qual é a principal característica dos escorpiões?',
-        'options': [
-          'Possuem asas',
-          'Têm ferrão venenoso',
-          'São mamíferos',
-          'Vivem na água'
-        ],
-        'correctIndex': 1
-      },
-      {
-        'question': 'O que os escorpiões comem?',
-        'options': ['Plantas', 'Insetos e aranhas', 'Peixes', 'Frutas'],
-        'correctIndex': 1
-      },
-      {
-        'question': 'Qual o habitat natural do escorpião?',
-        'options': ['Árvores', 'Desertos e florestas', 'Águas doces', 'Neve'],
-        'correctIndex': 1
-      },
-      {
-        'question': 'O escorpião brilha sob luz ultravioleta?',
-        'options': ['Sim', 'Não', 'Apenas os filhotes', 'Somente os venenosos'],
-        'correctIndex': 0
-      },
-      {
-        'question': 'Como se reproduzem?',
-        'options': [
-          'Botam ovos',
-          'Fazem metamorfose',
-          'Dançam antes do acasalamento',
-          'Vivem em grupos familiares'
-        ],
-        'correctIndex': 2
-      },
-    ],
-    'Borboleta': [
-      {
-        'question': 'Qual é a principal função das borboletas na natureza?',
-        'options': [
-          'Produzir mel',
-          'Ajudar na polinização',
-          'Caçar insetos',
-          'Comer folhas'
-        ],
-        'correctIndex': 1
-      },
-      {
-        'question': 'Qual fase NÃO faz parte do ciclo de vida da borboleta?',
-        'options': ['Ovo', 'Larva', 'Casulo', 'Peixe'],
-        'correctIndex': 3
-      },
-      {
-        'question': 'Como as borboletas se alimentam?',
-        'options': [
-          'Comem carne',
-          'Sugam néctar com a probóscide',
-          'Mastigam folhas',
-          'Bebem água'
-        ],
-        'correctIndex': 1
-      },
-      {
-        'question': 'O que acontece na fase da pupa (crisálida)?',
-        'options': [
-          'A borboleta morre',
-          'A borboleta hiberna',
-          'A metamorfose acontece',
-          'A borboleta põe ovos'
-        ],
-        'correctIndex': 2
-      },
-      {
-        'question': 'O que as borboletas usam para sentir o gosto?',
-        'options': ['Asas', 'Olhos', 'Patas', 'Antenas'],
-        'correctIndex': 2
-      },
-    ],
-    'Barbeiro': [
-      {
-        'question': 'Por que o barbeiro é perigoso?',
-        'options': [
-          'Ele pica e transmite a Doença de Chagas',
-          'Tem veneno mortal',
-          'Causa alergias severas',
-          'Se alimenta de plantas tóxicas'
-        ],
-        'correctIndex': 0
-      },
-      {
-        'question': 'O que o barbeiro suga para se alimentar?',
-        'options': ['Sangue', 'Seiva de plantas', 'Água', 'Veneno'],
-        'correctIndex': 0
-      },
-      {
-        'question': 'Qual é o principal causador da Doença de Chagas?',
-        'options': ['Bactéria', 'Fungo', 'Protozoário', 'Vírus'],
-        'correctIndex': 2
-      },
-      {
-        'question': 'Onde os barbeiros costumam se esconder?',
-        'options': [
-          'Embaixo da água',
-          'Em frestas e ninhos',
-          'Nas árvores',
-          'No ar'
-        ],
-        'correctIndex': 1
-      },
-      {
-        'question': 'Quantas fases tem o ciclo de vida do barbeiro?',
-        'options': ['3', '5', '7', '9'],
-        'correctIndex': 1
-      },
-    ],
-    'Abelha': [
-      {
-        'question': 'Qual a principal função das abelhas para o meio ambiente?',
-        'options': [
-          'Fazer mel',
-          'Polinizar plantas',
-          'Caçar insetos',
-          'Produzir geleia real'
-        ],
-        'correctIndex': 1
-      },
-      {
-        'question': 'Como as abelhas se comunicam?',
-        'options': [
-          'Através de danças',
-          'Pelo canto',
-          'Com sinais de luz',
-          'Pelo cheiro'
-        ],
-        'correctIndex': 0
-      },
-      {
-        'question': 'O que a abelha rainha faz?',
-        'options': [
-          'Produz mel',
-          'Põe ovos',
-          'Defende a colmeia',
-          'Poliniza flores'
-        ],
-        'correctIndex': 1
-      },
-      {
-        'question': 'Qual o nome do alimento produzido pelas abelhas?',
-        'options': ['Cera', 'Pólen', 'Mel', 'Seiva'],
-        'correctIndex': 2
-      },
-      {
-        'question': 'Quantas asas uma abelha tem?',
-        'options': ['2', '4', '6', '8'],
-        'correctIndex': 1
-      },
-    ],
-    'Aranha': [
-      {
-        'question': 'As aranhas pertencem a qual grupo de animais?',
-        'options': ['Insetos', 'Répteis', 'Aracnídeos', 'Anfíbios'],
-        'correctIndex': 2
-      },
-      {
-        'question': 'O que a aranha usa para produzir teia?',
-        'options': ['Boca', 'Glândulas abdominais', 'Patas', 'Olhos'],
-        'correctIndex': 1
-      },
-      {
-        'question':
-            'Qual o nome das partes que a aranha usa para injetar veneno?',
-        'options': ['Patas', 'Quelíceras', 'Garras', 'Asas'],
-        'correctIndex': 1
-      },
-      {
-        'question': 'Quantos olhos a maioria das aranhas possui?',
-        'options': ['2', '4', '6', '8'],
-        'correctIndex': 3
-      },
-      {
-        'question': 'Como as caranguejeiras se defendem?',
-        'options': [
-          'Fugindo',
-          'Soltando pelos urticantes',
-          'Atacando humanos',
-          'Fazendo barulho'
-        ],
-        'correctIndex': 1
-      },
-    ],
-  };
+  late FlutterTts _flutterTts;
+
+  @override
+  void initState() {
+    super.initState();
+    _flutterTts = FlutterTts();
+    _configureTts();
+    // Aguarda um pequeno delay para garantir que o TTS esteja pronto
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _speakCurrentQuestion();
+    });
+  }
+
+  void _configureTts() async {
+    await _flutterTts.setLanguage("pt-BR");
+    await _flutterTts.setSpeechRate(0.6);
+  }
+
+  Future<void> _speakCurrentQuestion() async {
+    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    String questionText = currentQuestion.question;
+    List<String> options = currentQuestion.options;
+    String ttsMessage = "Pergunta ${_currentQuestionIndex + 1}: $questionText. ";
+    for (int i = 0; i < options.length; i++) {
+      ttsMessage += "Opção ${i + 1}: ${options[i]}. ";
+    }
+    ttsMessage += "Fale a opção desejada.";
+    await _flutterTts.speak(ttsMessage);
+  }
 
   void _nextQuestion() {
     if (_selectedAnswer == null) return;
 
+    bool finishedQuiz = false;
+
     setState(() {
       _answers[_currentQuestionIndex] = _selectedAnswer;
 
-      if (_selectedAnswer ==
-          _questions[widget.insectName]![_currentQuestionIndex]
-              ['correctIndex']) {
+      final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+      if (_selectedAnswer == currentQuestion.correctIndex) {
         _score++;
       }
 
-      if (_currentQuestionIndex < _questions[widget.insectName]!.length - 1) {
+      if (_currentQuestionIndex < Questions.questionsMap[widget.insectName]!.length - 1) {
         _currentQuestionIndex++;
         _selectedAnswer = _answers[_currentQuestionIndex];
         _isAnswered = _selectedAnswer != null;
       } else {
+        finishedQuiz = true;
+        _flutterTts.stop(); // Para o TTS ao finalizar o quiz
         _showResultDialog();
       }
     });
+
+    if (!finishedQuiz) {
+      _speakCurrentQuestion();
+    }
   }
 
   void _previousQuestion() {
@@ -239,6 +84,7 @@ class _QuizScreenState extends State<QuizScreen> {
         _selectedAnswer = _answers[_currentQuestionIndex];
         _isAnswered = _selectedAnswer != null;
       });
+      _speakCurrentQuestion();
     }
   }
 
@@ -252,19 +98,18 @@ class _QuizScreenState extends State<QuizScreen> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: SizedBox(
-          height: 400, // Define um tamanho fixo para o diálogo
+          height: 400, // Tamanho fixo para o diálogo
           width: double.maxFinite,
           child: Column(
             children: [
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
-                  itemCount: _questions[widget.insectName]!.length,
+                  itemCount: Questions.questionsMap[widget.insectName]!.length,
                   itemBuilder: (context, index) {
-                    final question = _questions[widget.insectName]![index];
+                    final question = Questions.questionsMap[widget.insectName]![index];
                     final userAnswer = _answers[index];
-                    final correctAnswer = question['correctIndex'];
-
+                    final correctAnswer = question.correctIndex;
                     return Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -280,7 +125,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            question['question'],
+                            question.question,
                             style: const TextStyle(fontSize: 16),
                           ),
                           const SizedBox(height: 20),
@@ -289,9 +134,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: userAnswer == correctAnswer
-                                  ? Colors.green
-                                  : Colors.red,
+                              color: userAnswer == correctAnswer ? Colors.green : Colors.red,
                             ),
                           ),
                           Container(
@@ -304,20 +147,16 @@ class _QuizScreenState extends State<QuizScreen> {
                                   : Colors.red.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: userAnswer == correctAnswer
-                                    ? Colors.green
-                                    : Colors.red,
+                                color: userAnswer == correctAnswer ? Colors.green : Colors.red,
                                 width: 2,
                               ),
                             ),
                             child: Text(
-                              question['options'][userAnswer ?? 0],
+                              question.options[userAnswer ?? 0],
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: userAnswer == correctAnswer
-                                    ? Colors.green[800]
-                                    : Colors.red[800],
+                                color: userAnswer == correctAnswer ? Colors.green[800] : Colors.red[800],
                               ),
                             ),
                           ),
@@ -344,7 +183,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                 ),
                               ),
                               child: Text(
-                                question['options'][correctAnswer],
+                                question.options[correctAnswer],
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -360,8 +199,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -383,18 +221,19 @@ class _QuizScreenState extends State<QuizScreen> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEAB08A),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       ),
                       child: const Text(
                         'Fechar',
-                        style: TextStyle(color: Color.fromARGB(255, 0, 0, 0), fontSize: 16),
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 0, 0, 0),
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                     IconButton(
                       onPressed: () {
-                        if (_pageController.page! <
-                            _questions[widget.insectName]!.length - 1) {
+                        if (_pageController.page! < Questions.questionsMap[widget.insectName]!.length - 1) {
                           _pageController.nextPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut,
@@ -414,8 +253,14 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   @override
+  void dispose() {
+    _flutterTts.stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final question = _questions[widget.insectName]![_currentQuestionIndex];
+    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCE6D8),
@@ -425,6 +270,7 @@ class _QuizScreenState extends State<QuizScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
+            _flutterTts.stop();
             Navigator.pop(context);
           },
         ),
@@ -435,18 +281,18 @@ class _QuizScreenState extends State<QuizScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Pergunta ${_currentQuestionIndex + 1}/${_questions[widget.insectName]!.length}',
+              'Pergunta ${_currentQuestionIndex + 1}/${Questions.questionsMap[widget.insectName]!.length}',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              question['question'],
+              currentQuestion.question,
               style: const TextStyle(fontSize: 20),
             ),
             const SizedBox(height: 20),
-            ...List.generate(question['options'].length, (index) {
+            ...List.generate(currentQuestion.options.length, (index) {
               return RadioListTile<int>(
-                title: Text(question['options'][index]),
+                title: Text(currentQuestion.options[index]),
                 value: index,
                 groupValue: _selectedAnswer,
                 onChanged: (value) {
@@ -462,15 +308,10 @@ class _QuizScreenState extends State<QuizScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
-                  onPressed: _currentQuestionIndex > 0
-                      ? _previousQuestion
-                      : null, // Desativa no início
+                  onPressed: _currentQuestionIndex > 0 ? _previousQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _currentQuestionIndex > 0
-                        ? Colors.grey
-                        : Colors.grey.shade400,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                    backgroundColor: _currentQuestionIndex > 0 ? Colors.grey : Colors.grey.shade400,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   ),
                   child: const Text(
                     'Voltar',
@@ -478,17 +319,13 @@ class _QuizScreenState extends State<QuizScreen> {
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: _isAnswered
-                      ? _nextQuestion
-                      : null, // Só permite avançar se houver resposta
+                  onPressed: _isAnswered ? _nextQuestion : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   ),
                   child: Text(
-                    _currentQuestionIndex ==
-                            _questions[widget.insectName]!.length - 1
+                    _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1
                         ? 'Confirmar Respostas'
                         : 'Próxima Pergunta',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
