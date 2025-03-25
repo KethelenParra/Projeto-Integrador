@@ -3,7 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'insect_details_screen.dart';
-import 'package:vision_app_3d/screens/inserct.dart'; // Importar a classe Insect e o mapeamento insectData
+import 'package:vision_app_3d/screens/insect.dart'; // Importar a classe Insect e o mapeamento insectData
 
 class QRViewExample extends StatefulWidget {
   const QRViewExample({super.key});

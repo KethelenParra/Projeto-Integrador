@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import '../screens/qr_view_exemple.dart';
@@ -19,34 +20,77 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
   bool _isSpeaking = false;
   bool _permissionGranted = false;
   int _selectedIndex = 0; // Exibe a tela de boas-vindas por padrão
+  bool _firstTime = true;
+  DateTime? _lastCommandTime;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeVoiceFeatures();
+    _checkPermissions().then((_) { // Verifique permissões primeiro
+      if (_permissionGranted) {
+        _initializeVoiceFeatures();
+      }
+    });
   }
 
-  Future<void> _initAudioServices() async{
+  Future<void> _checkPermissions() async {
+    final status = await Permission.microphone.request();
+    setState(() => _permissionGranted = status.isGranted);
+
+    if (!_permissionGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ative as permissões do microfone nas configurações'))
+      );
+    }
+  }
+
+  Future<void> _initAudioServices() async {
     _flutterTts = FlutterTts();
     _speechToText = stt.SpeechToText();
 
     await _configureTTS();
-    await _checkPermissions();
     await _initSpeechRecognition();
 
-    _startAudioFlow();
+    _startInfiniteListening();
+    _speakWelcomeMessage();
   }
 
-  Future<void> _checkPermissions() async {
-    final micStatus = await Permission.microphone.request();
-    setState(() => _permissionGranted = micStatus.isGranted);
+  void _startInfiniteListening() {
+    if (!_permissionGranted || _isListening) return;
 
-    if (!_permissionGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Permissão do microfone é necessária")),
-      );
-    }
+    _speechToText.listen(
+      onResult: (result) {
+        if (result.finalResult) {
+          final command = result.recognizedWords.toLowerCase();
+          print("Comando reconhecido: $command");
+          _lastCommandTime = DateTime.now();
+
+          if (command.contains('escanear')) {
+            _navigateToQRView();
+          } else if (command.contains('lista')) {
+            _navigateToListView();
+          }
+        }
+      },
+      localeId: 'pt-BR',
+      listenMode: stt.ListenMode.dictation, // Modo ditado para captura contínua
+      cancelOnError: false,
+      partialResults: false,
+      listenFor: Duration(minutes: 30), // Tempo longo de escuta
+      pauseFor: Duration(seconds: 1),
+      onSoundLevelChange: (level) {
+        // Pode ser usado para feedback visual do nível de áudio
+      },
+    ).then((value) {
+      if (mounted) {
+        setState(() => _isListening = value ?? false);
+        // Reinicia imediatamente se parou sem comando
+        if (value == false && !_isSpeaking) {
+          _startInfiniteListening();
+        }
+      }
+    });
   }
 
   Future<void> _initializeVoiceFeatures() async {
@@ -66,17 +110,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
     await _flutterTts.setLanguage("pt-BR");
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
+
     _flutterTts.setStartHandler(() => setState(() => _isSpeaking = true));
     _flutterTts.setCompletionHandler(() => setState(() => _isSpeaking = false));
     _flutterTts.setErrorHandler((msg) {
       setState(() => _isSpeaking = false);
       print("Erro TTS: $msg");
-    });
-    _flutterTts.setCompletionHandler(() {
-      // Reinicia a escuta quando termina de falar
-      if (_permissionGranted) {
-        _startListening();
-      }
     });
   }
 
@@ -96,65 +135,155 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
 
   Future<void> _initSpeechRecognition() async {
     try {
-      final available = await _speechToText.initialize(
-        onStatus: (status) => print("Status STT: $status"),
-        onError: (error) {
-          print("Erro STT: $error");
-          _retryListening();
-        },
-      );
-
-      if (!available) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Reconhecimento de voz não disponível")),
+      // Para qualquer escuta ativa antes de reiniciar
+      if (_speechToText.isListening) {
+        await _speechToText.stop();
+      }
+      try {
+        final available = await _speechToText.initialize(
+          onStatus: (status) {
+            if (status == 'listening') {
+              print("Mic ativo");
+            }
+          },
+          onError: (error) {
+            if (error.errorMsg !=
+                'error_no_match') { // Ignora especificamente este erro
+              print("Erro relevante: ${error.errorMsg}");
+              _retryListening();
+            }
+          },
         );
+        if (!available) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Recurso de voz não disponível")),
+            );
+          }
+        }
+      } catch (e){
+        print("Message: $e");
       }
     } catch (e) {
-      print("Erro ao inicializar STT: $e");
+      print("Erro crítico ao inicializar STT: $e");
     }
   }
 
   void _startAudioFlow() {
-    if (_permissionGranted) {
+    if (!_permissionGranted) return;
+
+    if (!_isListening) {
       _startContinuousListening();
-      _speakWelcomeMessage();
+    }
+
+    // Fala a mensagem completa apenas na primeira vez
+    if (!_isSpeaking && _firstTime) {
+      _speakWelcomeMessage(fullMessage: true);
+      _firstTime = false;
     }
   }
 
-  void _startContinuousListening() {
-    if (!_permissionGranted || _isListening) return;
+  Future<void> _startContinuousListening() async {
+    if (!_permissionGranted || _isListening || !mounted) return;
 
-    _speechToText.listen(
-      onResult: (result) {
-        if (result.recognizedWords.toLowerCase().contains('iniciar')) {
-          _navigateToQRView();
-        }
-      },
-      localeId: 'pt-BR',
-      listenMode: stt.ListenMode.confirmation,
-      cancelOnError: true,
-      partialResults: false,
-    ).then((value) {
-      if (mounted) {
-        setState(() => _isListening = value ?? false);
+    try {
+      // 1. Pare qualquer escuta anterior
+      if (_speechToText.isListening) {
+        await _speechToText.stop();
       }
-    }).catchError((error) {
-      print("Erro ao escutar: $error");
+
+      // 2. Delay para estabilização
+      await Future.delayed(Duration(milliseconds: 300));
+
+      // 3. Inicie a escuta
+      final success = await _speechToText.listen(
+        onResult: (result) {
+          if (result.finalResult) {
+            final command = result.recognizedWords.toLowerCase();
+            if (command.contains('escanear')) _navigateToQRView();
+            if (command.contains('lista')) _navigateToListView();
+          }
+        },
+        localeId: 'pt-BR',
+        listenMode: stt.ListenMode.dictation,
+        cancelOnError: false,
+        partialResults: false,
+        listenFor: Duration(minutes: 5),
+      );
+
+      // 4. Atualize o estado
+      if (mounted) {
+        setState(() => _isListening = success ?? false);
+      }
+
+    } catch (e) {
+      print("Falha ao ativar microfone: $e");
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
       _retryListening();
-    });
+    }
+  }
+
+  bool _matchesCommand(String input, String command) {
+    final variations = {
+      'escanear': ['escanear', 'scanear', 'escaneia', 'scanner'],
+      'lista': ['lista', 'listar', 'listagem', 'ver lista']
+    };
+
+    return variations[command]?.any((variant) => input.contains(variant)) ?? false;
+  }
+
+  void _executeCommand(String command, Function() action) {
+    print("Executando comando: $command");
+    _vibrate(); // Feedback tátil
+    action();
   }
 
   void _retryListening() {
-    Future.delayed(const Duration(seconds: 1), _startContinuousListening);
+    if (!mounted || _isListening) return;
+
+    Future.delayed(Duration(seconds: 1), () {
+      if (mounted && !_isListening) {
+        _startContinuousListening();
+      }
+    });
   }
 
+  int _retryCount = 0;
 
-  Future<void> _speakWelcomeMessage() async {
+  Future<void> _speakWelcomeMessage({bool fullMessage = true}) async {
     if (_isSpeaking) return;
 
-    await _flutterTts.speak(
-      "Obrigado por utilizar o Vision App, um aplicativo dedicado a promover o aprendizado sobre o mundo dos insetos de forma inclusiva, para explorar e descubrir informações sobre diferentes espécies de insetos, com recursos em áudio, vídeos e através da experiência com as mãos. Viva uma experiência interessante. Na parte inferior da tela haverá duas opções de comandos de voz para navegar. Basta dizer: lista, para acessar a tela com todas as opções de insetos ou: escanear, para abrir a tela de QR Code e obter informações detalhadas sobre o inseto escaneado.",
-    );
+    try {
+      setState(() => _isSpeaking = true);
+
+      final message = fullMessage
+          ? "Obrigado por utilizar o Vision App, um aplicativo dedicado a "
+          "promover"
+          "o aprendizado sobre o mundo dos insetos de forma inclusiva, para "
+          "explorar e descubrir informações sobre diferentes espécies de "
+          "insetos, com recursos em áudio, vídeos e através da experiência "
+          "com as mãos. Viva uma experiência interessante. Na parte inferior "
+          "da tela haverá duas opções de comandos de voz para navegar. Basta "
+          "dizer: lista, para acessar a tela com todas as opções de insetos "
+          "ou: escanear, para abrir a tela de QR Code e obter informações "
+          "detalhadas sobre o inseto escaneado."
+          : "Bem-vindo de volta. Diga 'lista' ou 'escanear' para continuar.";
+
+      await _flutterTts.awaitSpeakCompletion(true);
+      await _flutterTts.speak(message);
+    } catch (e) {
+      print("Erro ao falar mensagem: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isSpeaking = false);
+      }
+      // Reinicia a escuta após terminar de falar
+      if (!_isListening) {
+        _startContinuousListening();
+      }
+    }
   }
 
   void _startListening() {
@@ -162,8 +291,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
 
     _speechToText.listen(
       onResult: (result) {
-        if (result.recognizedWords.toLowerCase().contains('iniciar')) {
+        if (result.recognizedWords.toLowerCase().contains('escanear')) {
           _navigateToQRView();
+        } else if(result.recognizedWords.toLowerCase().contains('lista')){
+          _navigateToListView();
         }
       },
       localeId: 'pt-BR',
@@ -177,27 +308,54 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
     });
   }
 
-  void _navigateToQRView() {
-    _stopAllAudio();
+  void _navigateToQRView() async {
+    await _stopAllAudio();
+    _firstTime = false; // Marca que não é mais a primeira vez
 
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const QRViewExample()),
-    ).then((_) {
-      if (mounted) {
-        _startAudioFlow();
-      }
-    });
+    );
+
+    _handleNavigationReturn();
   }
 
-  void _stopAllAudio() {
-    _flutterTts.stop();
-    _speechToText.stop();
+  void _navigateToListView() async {
+    await _stopAllAudio();
+    _firstTime = false; // Marca que não é mais a primeira vez
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const InsectListScreen()),
+    );
+
+    _handleNavigationReturn();
+  }
+  void _handleNavigationReturn() {
     if (mounted) {
-      setState(() {
-        _isSpeaking = false;
-        _isListening = false;
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _startAudioFlow();
+          _speakWelcomeMessage(fullMessage: false); // Mensagem reduzida ao voltar
+        }
       });
+    }
+  }
+
+  Future<void> _stopAllAudio() async {
+    try {
+      await _flutterTts.stop();
+      if (_speechToText.isListening) {
+        await _speechToText.stop();
+      }
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _isListening = false;
+        });
+      }
+    } catch (e) {
+      print("Erro ao parar áudio: $e");
     }
   }
 
@@ -208,11 +366,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
     super.dispose();
   }
 
+  // Função para acionar a vibração personalizada
+  void _vibrate() async {
+    if (await Vibration.hasVibrator()) {
+      Vibration.vibrate(duration: 200); // vibra por 200 milissegundos
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        _startAudioFlow();
+      // Reinicia mais rápido quando o app volta ao foco
+        Future.delayed(const Duration(milliseconds: 1), _startAudioFlow);
         break;
       case AppLifecycleState.paused:
         _stopAllAudio();
@@ -223,6 +389,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
   }
 
   void _onItemTapped(int index) {
+    _vibrate(); // Aciona a vibração ao tocar no item
     if (index == 0) {
       // Ao tocar em "Escanear", navega para a tela QRViewExample
       Navigator.push(
@@ -244,17 +411,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
   @override
   Widget build(BuildContext context) {
     // Define as duas telas:
-    // 1. Tela de boas-vindas (sem o botão "Iniciar")
+    // 1. Tela de boas-vindas
     // 2. Tela com a lista de insetos
     final List<Widget> _screens = [
-      Center(
+      const Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Spacer(),
-              const CircleAvatar(
+              Spacer(),
+              CircleAvatar(
                 radius: 40,
                 backgroundColor: Color(0xFFEAB08A),
                 child: Icon(
@@ -263,8 +430,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
                   color: Color(0xFF4A4A4A),
                 ),
               ),
-              const SizedBox(height: 15),
-              const Text(
+              SizedBox(height: 15),
+              Text(
                 'Vision App',
                 style: TextStyle(
                   fontSize: 32,
@@ -272,8 +439,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
                   color: Colors.black,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
+              SizedBox(height: 8),
+              Text(
                 'Bem-vindo',
                 style: TextStyle(
                   fontSize: 24,
@@ -281,8 +448,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
                   color: Colors.black,
                 ),
               ),
-              const SizedBox(height: 15),
-              const Padding(
+              SizedBox(height: 15),
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   'Obrigado por utilizar o Vision App, um aplicativo dedicado a promover o aprendizado sobre o mundo dos insetos de forma inclusiva, para explorar e descubrir informações sobre diferentes espécies de insetos, com recursos em áudio, vídeos e através da experiência com as mãos. Viva uma experiência interessante.',
@@ -293,7 +460,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
                   textAlign: TextAlign.center,
                 ),
               ),
-              const Spacer(),
+              Spacer(),
             ],
           ),
         ),
@@ -320,6 +487,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
             label: 'Lista',
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _startContinuousListening,
+        backgroundColor: _isListening ? Colors.green : Colors.red,
+        child: Icon(
+          _isListening ? Icons.mic : Icons.mic_off,
+          color: Colors.white,
+        ),
       ),
     );
   }
