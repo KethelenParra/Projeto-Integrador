@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'insect_details_screen.dart';
-import 'package:vision_app_3d/screens/inserct.dart'; // Importar a classe Insect e o mapeamento insectData
-import 'package:vibration/vibration.dart'; // Import para vibração personalizada
+import 'package:vision_app_3d/screens/insect.dart'; // Importar a classe Insect e o mapeamento insectData
 
 class QRViewExample extends StatefulWidget {
   const QRViewExample({super.key});
@@ -15,17 +15,21 @@ class QRViewExample extends StatefulWidget {
 class _QRViewExampleState extends State<QRViewExample> {
   final MobileScannerController controller = MobileScannerController();
   final FlutterTts _flutterTts = FlutterTts(); // Instância do TTS
+  final stt.SpeechToText _speechToText = stt.SpeechToText();
   bool isScanCompleted = false;
+  bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
     _speakInstructions(); // Lê o texto assim que a tela é aberta
+    _initSpeech();
   }
 
   @override
   void dispose() {
     _flutterTts.stop(); // Para o TTS ao sair da tela
+    _speechToText.stop();
     super.dispose();
   }
 
@@ -37,16 +41,42 @@ class _QRViewExampleState extends State<QRViewExample> {
     );
   }
 
+  Future<void> _initSpeech() async{
+    bool available = await _speechToText.initialize(
+      onStatus: (status) {
+        if (status == 'done'){
+          setState(() => _isListening = false);
+        }
+      },
+      onError: (error) => print("Erro: $error"),
+    );
+
+    if(available){
+      _startListening();
+    }
+  }
+
+  void _startListening() async{
+    if(!_isListening){
+      await _speechToText.listen(
+        onResult: (result){
+          if (result.recognizedWords.toLowerCase() == "voltar"){
+            _navigateBackToHome();
+          }
+        },
+        localeId: "pt-BR",
+      );
+    }
+  }
+
+  void _navigateBackToHome(){
+    _speechToText.stop(); // Para a escuta antes de navegar
+    Navigator.pop(context); // Volta para a tela inicial
+  }
+
   void closeScreen() {
     isScanCompleted = false;
     _flutterTts.stop(); // Para o TTS caso um código seja detectado
-  }
-
-  // Função para acionar a vibração personalizada
-  void _vibrate() async {
-    if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: 200); // vibração de 200ms
-    }
   }
 
   @override
@@ -63,19 +93,17 @@ class _QRViewExampleState extends State<QRViewExample> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
-            _vibrate(); // Vibração ao clicar no botão de voltar
             _flutterTts.stop(); // Interrompe qualquer leitura
             Navigator.pop(context); // Volta para a tela anterior
-            _speakInstructions(); // Reproduz as instruções ao retornar
           },
         ),
       ),
       body: Column(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+              children: const [
                 Text(
                   "Coloque o QR Code na área demarcada",
                   style: TextStyle(
@@ -109,16 +137,12 @@ class _QRViewExampleState extends State<QRViewExample> {
                       controller: controller,
                       onDetect: (barcodeCapture) {
                         if (!isScanCompleted) {
-                          final String code =
-                              barcodeCapture.barcodes.first.rawValue ?? '';
-                          print(
-                              'Código escaneado: $code'); // Log para depuração
+                          final String code = barcodeCapture.barcodes.first.rawValue ?? '';
+                          print('Código escaneado: $code'); // Log para depuração
                           if (insectData.containsKey(code)) {
                             final insect = insectData[code]!;
                             isScanCompleted = true;
-                            _flutterTts
-                                .stop(); // Para o TTS ao navegar para outra tela
-                            _vibrate(); // Vibração ao mudar de tela após leitura bem-sucedida
+                            _flutterTts.stop(); // Para o TTS ao navegar para outra tela
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -132,9 +156,7 @@ class _QRViewExampleState extends State<QRViewExample> {
                             });
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('QR Code não reconhecido: $code')),
+                              SnackBar(content: Text('QR Code não reconhecido: $code')),
                             );
                           }
                         }

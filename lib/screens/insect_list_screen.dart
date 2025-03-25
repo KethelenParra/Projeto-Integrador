@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:vibration/vibration.dart'; // Import para vibração personalizada
+import 'package:vision_app_3d/screens/quiz_screen.dart';
 import 'insect_details_screen.dart';
 import 'home_page.dart';
-import 'inserct.dart'; // Importa os dados dos insetos
+import 'quiz_screen.dart';
+import 'insect.dart'; // Importa os dados dos insetos
 
 class InsectListScreen extends StatefulWidget {
   const InsectListScreen({super.key});
@@ -23,7 +26,7 @@ class _InsectListScreenState extends State<InsectListScreen> {
 
   @override
   void dispose() {
-    _flutterTts.stop(); // Para o TTS ao sair da tela
+    _flutterTts.stop();
     super.dispose();
   }
 

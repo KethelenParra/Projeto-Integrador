@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vision_app_3d/screens/inserct.dart';
+import 'package:vision_app_3d/screens/insect.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'quiz_screen.dart';
 import 'package:vibration/vibration.dart'; // Import para vibração personalizada
