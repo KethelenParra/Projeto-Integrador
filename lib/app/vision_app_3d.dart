@@ -8,7 +8,7 @@ class VisionApp3D extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Vision App 3D',
+      title: 'Vision App',
       theme: appTheme,
       home: const HomePage(),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:video_player/video_player.dart';
 import 'package:vision_app_3d/screens/insect.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
@@ -19,6 +20,9 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
   final ScrollController _scrollController = ScrollController();
   double _currentScrollPosition = 0;
 
+  final stt.SpeechToText _speechToText = stt.SpeechToText();
+  bool _isListening = false;
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +31,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         setState(() {});
         _videoController.play(); // Inicia o vídeo automaticamente
       });
+
+    _speechToText.initialize();
   }
 
   @override
@@ -51,6 +57,30 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
       );
+    }
+  }
+
+  // Função para começar a escutar o comando de voz
+  void _listenForCommand() async {
+    if (!_isListening) {
+      bool available = await _speechToText.listen(
+        onResult: (result) {
+          if (result.recognizedWords.toLowerCase().contains("fazer quiz")) {
+            _vibrate(); // Vibração ao reconhecer o comando
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => QuizScreen(insectName: widget.insect.name),
+              ),
+            );
+          }
+        },
+      );
+      if (available) {
+        setState(() {
+          _isListening = true;
+        });
+      }
     }
   }
 

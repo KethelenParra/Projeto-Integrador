@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 import 'package:vision_app_3d/screens/quiz_screen.dart';
@@ -17,10 +18,14 @@ class InsectListScreen extends StatefulWidget {
 
 class _InsectListScreenState extends State<InsectListScreen> {
   final FlutterTts _flutterTts = FlutterTts();
+  final stt.SpeechToText _speechToText = stt.SpeechToText();
+  bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
+    _checkPermissions();
+    _initializeSpeech();
     _speakInstruction();
   }
 
@@ -30,11 +35,52 @@ class _InsectListScreenState extends State<InsectListScreen> {
     super.dispose();
   }
 
+  Future<void> _initializeSpeech() async {
+    bool available = await _speechToText.initialize(
+      onStatus: (status) {
+        if (status == "notListening") {
+          setState(() => _isListening = false);
+        }
+      },
+      onError: (error) {
+        print("Erro no reconhecimento de voz: $error");
+      },
+    );
+
+    if (available) {
+      setState(() => _isListening = false);
+      _startListening(); // Start listening immediately
+    } else {
+      print("Reconhecimento de voz não disponível");
+    }
+  }
+
+  Future<void> _checkPermissions() async {
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      await Permission.microphone.request();
+    }
+  }
+
+  void _startListening() async {
+    if (!_isListening && _speechToText.isAvailable) {
+      await _speechToText.listen(
+        onResult: (result) {
+          if (result.finalResult) {
+            _handleVoiceCommand(result.recognizedWords);
+          }
+        },
+      );
+      setState(() => _isListening = true);
+    }
+  }
+
   Future<void> _speakInstruction() async {
     await _flutterTts.setLanguage("pt-BR");
     await _flutterTts.setSpeechRate(0.6);
     await _flutterTts.speak(
-      "Escolha um inseto da lista para ver mais informações sobre ele. Fale o nome do inseto desejado para abrir a tela de detalhes. Insetos disponiveis: Escorpião. Borboleta. Barbeiro. Abelha. Aranha.",
+      "Escolha um inseto da lista para ver mais informações sobre ele. Fale o nome do inseto desejado para abrir a tela de detalhes. "
+          "Insetos disponíveis: Escorpião, Borboleta, Barbeiro, Abelha, Aranha.",
     );
   }
 
@@ -42,6 +88,51 @@ class _InsectListScreenState extends State<InsectListScreen> {
   void _vibrate() async {
     if (await Vibration.hasVibrator() ?? false) {
       Vibration.vibrate(duration: 200); // Vibração de 200ms
+    }
+  }
+
+  void _handleVoiceCommand(String command) {
+    final lowerCaseCommand = command.toLowerCase();
+
+    // Verifique se algum inseto da lista corresponde ao comando falado
+    final insectUrl = insectData.keys.firstWhere(
+          (url) => lowerCaseCommand.contains(insectData[url]?.name.toLowerCase() ?? ''),
+      orElse: () => '',
+    );
+
+    if (insectUrl.isNotEmpty) {
+      _navigateToInsectDetail(insectUrl); // Passa a URL do inseto
+    } else {
+      _speakInstruction(); // Solicite novamente se o comando não for reconhecido
+    }
+  }
+
+
+  Future<void> _navigateToInsectDetail(String insectUrl) async {
+    await _stopAllAudio();
+
+    // Buscar o inseto no Map usando a URL
+    final insect = insectData[insectUrl];
+
+    if (insect != null) {
+      // Navegar para a tela de detalhes do inseto
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => InsectDetailsScreen(insect: insect),
+        ),
+      );
+    } else {
+      // Caso não encontre o inseto
+      _speakInstruction();
+    }
+  }
+
+
+  Future<void> _stopAllAudio() async {
+    await _flutterTts.stop();
+    if (_speechToText.isListening) {
+      await _speechToText.stop();
     }
   }
 
