@@ -60,7 +60,23 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // Avança para a próxima pergunta, com vibração
+  /// Método para ler os resultados de cada página do diálogo.
+  Future<void> _speakResultPage(int index) async {
+    final question = Questions.questionsMap[widget.insectName]![index];
+    final userAnswer = _answers[index];
+    final correctAnswer = question.correctIndex;
+    String resultText = "Pergunta ${index + 1}: ${question.question}. ";
+    resultText += "Sua resposta: ${question.options[userAnswer ?? 0]}. ";
+    if (userAnswer == correctAnswer) {
+      resultText +=
+          "Sua resposta está correta. O oque você deseja fazer? voltar pergunta, fechar correção ou proxima correção?";
+    } else {
+      resultText +=
+          "Sua resposta está errada, a resposta correta é: ${question.options[correctAnswer]}. O oque você deseja fazer? voltar pergunta, fechar correção ou proxima correção?";
+    }
+    await _flutterTts.speak(resultText);
+  }
+
   void _nextQuestion() {
     _vibrate(); // Vibração ao avançar
     if (_selectedAnswer == null) return;
@@ -110,6 +126,11 @@ class _QuizScreenState extends State<QuizScreen> {
   void _showResultDialog() {
     PageController _pageController = PageController();
 
+    // Após abrir o diálogo, dispara a leitura da primeira página
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _speakResultPage(0);
+    });
+
     showDialog(
       context: context,
       barrierDismissible:
@@ -124,6 +145,11 @@ class _QuizScreenState extends State<QuizScreen> {
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
+                  onPageChanged: (index) {
+                    // Quando a página muda, o TTS lê o conteúdo correspondente
+                    _flutterTts.stop();
+                    _speakResultPage(index);
+                  },
                   itemCount: Questions.questionsMap[widget.insectName]!.length,
                   itemBuilder: (context, index) {
                     final question =
