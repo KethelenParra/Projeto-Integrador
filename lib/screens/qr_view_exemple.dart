@@ -91,7 +91,7 @@ class _QRViewExampleState extends State<QRViewExample> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
             _flutterTts.stop(); // Interrompe qualquer leitura
             Navigator.pop(context); // Volta para a tela anterior

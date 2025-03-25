@@ -382,13 +382,13 @@ class _QuizScreenState extends State<QuizScreen> {
                         Navigator.pop(context); // Volta para a tela anterior
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
+                        backgroundColor: const Color(0xFFEAB08A),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 10),
                       ),
                       child: const Text(
                         'Fechar',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
+                        style: TextStyle(color: Color.fromARGB(255, 0, 0, 0), fontSize: 16),
                       ),
                     ),
                     IconButton(
@@ -418,9 +418,16 @@ class _QuizScreenState extends State<QuizScreen> {
     final question = _questions[widget.insectName]![_currentQuestionIndex];
 
     return Scaffold(
+      backgroundColor: const Color(0xFFFCE6D8),
       appBar: AppBar(
         title: Text('Quiz sobre ${widget.insectName}'),
-        backgroundColor: Colors.orange,
+        backgroundColor: const Color(0xFFEAB08A),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -475,7 +482,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       ? _nextQuestion
                       : null, // Só permite avançar se houver resposta
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isAnswered ? Colors.orange : Colors.grey,
+                    backgroundColor: _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 10),
                   ),
