@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'questions.dart';
+import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class QuizScreen extends StatefulWidget {
   final String insectName;
@@ -31,16 +32,20 @@ class _QuizScreenState extends State<QuizScreen> {
     });
   }
 
+  // Configura o TTS
   void _configureTts() async {
     await _flutterTts.setLanguage("pt-BR");
     await _flutterTts.setSpeechRate(0.6);
   }
 
+  // Faz o TTS ler a pergunta atual e as opções
   Future<void> _speakCurrentQuestion() async {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    final currentQuestion =
+        Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
     String questionText = currentQuestion.question;
     List<String> options = currentQuestion.options;
-    String ttsMessage = "Pergunta ${_currentQuestionIndex + 1}: $questionText. ";
+    String ttsMessage =
+        "Pergunta ${_currentQuestionIndex + 1}: $questionText. ";
     for (int i = 0; i < options.length; i++) {
       ttsMessage += "Opção ${i + 1}: ${options[i]}. ";
     }
@@ -48,7 +53,16 @@ class _QuizScreenState extends State<QuizScreen> {
     await _flutterTts.speak(ttsMessage);
   }
 
+  // Função para acionar a vibração personalizada
+  void _vibrate() async {
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(duration: 200); // vibração de 200ms
+    }
+  }
+
+  // Avança para a próxima pergunta, com vibração
   void _nextQuestion() {
+    _vibrate(); // Vibração ao avançar
     if (_selectedAnswer == null) return;
 
     bool finishedQuiz = false;
@@ -56,12 +70,14 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() {
       _answers[_currentQuestionIndex] = _selectedAnswer;
 
-      final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+      final currentQuestion =
+          Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
       if (_selectedAnswer == currentQuestion.correctIndex) {
         _score++;
       }
 
-      if (_currentQuestionIndex < Questions.questionsMap[widget.insectName]!.length - 1) {
+      if (_currentQuestionIndex <
+          Questions.questionsMap[widget.insectName]!.length - 1) {
         _currentQuestionIndex++;
         _selectedAnswer = _answers[_currentQuestionIndex];
         _isAnswered = _selectedAnswer != null;
@@ -77,7 +93,9 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
+  // Retrocede para a pergunta anterior, com vibração
   void _previousQuestion() {
+    _vibrate(); // Vibração ao voltar
     if (_currentQuestionIndex > 0) {
       setState(() {
         _currentQuestionIndex--;
@@ -88,6 +106,7 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
+  // Exibe o diálogo com os resultados do quiz, adicionando vibração aos botões
   void _showResultDialog() {
     PageController _pageController = PageController();
 
@@ -107,7 +126,8 @@ class _QuizScreenState extends State<QuizScreen> {
                   controller: _pageController,
                   itemCount: Questions.questionsMap[widget.insectName]!.length,
                   itemBuilder: (context, index) {
-                    final question = Questions.questionsMap[widget.insectName]![index];
+                    final question =
+                        Questions.questionsMap[widget.insectName]![index];
                     final userAnswer = _answers[index];
                     final correctAnswer = question.correctIndex;
                     return Padding(
@@ -134,7 +154,9 @@ class _QuizScreenState extends State<QuizScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: userAnswer == correctAnswer ? Colors.green : Colors.red,
+                              color: userAnswer == correctAnswer
+                                  ? Colors.green
+                                  : Colors.red,
                             ),
                           ),
                           Container(
@@ -147,7 +169,9 @@ class _QuizScreenState extends State<QuizScreen> {
                                   : Colors.red.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: userAnswer == correctAnswer ? Colors.green : Colors.red,
+                                color: userAnswer == correctAnswer
+                                    ? Colors.green
+                                    : Colors.red,
                                 width: 2,
                               ),
                             ),
@@ -156,7 +180,9 @@ class _QuizScreenState extends State<QuizScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: userAnswer == correctAnswer ? Colors.green[800] : Colors.red[800],
+                                color: userAnswer == correctAnswer
+                                    ? Colors.green[800]
+                                    : Colors.red[800],
                               ),
                             ),
                           ),
@@ -199,12 +225,14 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
                       onPressed: () {
+                        _vibrate(); // Vibração ao clicar no botão de voltar do diálogo
                         if (_pageController.page! > 0) {
                           _pageController.previousPage(
                             duration: const Duration(milliseconds: 300),
@@ -216,12 +244,14 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                     ElevatedButton(
                       onPressed: () {
+                        _vibrate(); // Vibração ao clicar no botão "Fechar"
                         Navigator.pop(context); // Fecha o diálogo
                         Navigator.pop(context); // Volta para a tela anterior
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEAB08A),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
                       ),
                       child: const Text(
                         'Fechar',
@@ -233,7 +263,10 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                     IconButton(
                       onPressed: () {
-                        if (_pageController.page! < Questions.questionsMap[widget.insectName]!.length - 1) {
+                        _vibrate(); // Vibração ao clicar no botão de avançar do diálogo
+                        if (_pageController.page! <
+                            Questions.questionsMap[widget.insectName]!.length -
+                                1) {
                           _pageController.nextPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut,
@@ -260,7 +293,8 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    final currentQuestion =
+        Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCE6D8),
@@ -268,8 +302,10 @@ class _QuizScreenState extends State<QuizScreen> {
         title: Text('Quiz sobre ${widget.insectName}'),
         backgroundColor: const Color(0xFFEAB08A),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          icon:
+              const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
+            _vibrate(); // Vibração ao clicar no botão de voltar
             _flutterTts.stop();
             Navigator.pop(context);
           },
@@ -296,6 +332,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 value: index,
                 groupValue: _selectedAnswer,
                 onChanged: (value) {
+                  _vibrate(); // Vibração ao selecionar uma opção
                   setState(() {
                     _selectedAnswer = value;
                     _isAnswered = true; // Habilita o botão "Próxima Pergunta"
@@ -308,10 +345,14 @@ class _QuizScreenState extends State<QuizScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
-                  onPressed: _currentQuestionIndex > 0 ? _previousQuestion : null,
+                  onPressed:
+                      _currentQuestionIndex > 0 ? _previousQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _currentQuestionIndex > 0 ? Colors.grey : Colors.grey.shade400,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    backgroundColor: _currentQuestionIndex > 0
+                        ? Colors.grey
+                        : Colors.grey.shade400,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                   ),
                   child: const Text(
                     'Voltar',
@@ -321,11 +362,15 @@ class _QuizScreenState extends State<QuizScreen> {
                 ElevatedButton(
                   onPressed: _isAnswered ? _nextQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    backgroundColor:
+                        _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                   ),
                   child: Text(
-                    _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1
+                    _currentQuestionIndex ==
+                            Questions.questionsMap[widget.insectName]!.length -
+                                1
                         ? 'Confirmar Respostas'
                         : 'Próxima Pergunta',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
