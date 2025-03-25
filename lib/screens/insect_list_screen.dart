@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 import 'insect_details_screen.dart';
 import 'home_page.dart';
 import 'inserct.dart'; // Importa os dados dos insetos
@@ -34,6 +35,13 @@ class _InsectListScreenState extends State<InsectListScreen> {
     );
   }
 
+  // Função para acionar a vibração personalizada
+  void _vibrate() async {
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(duration: 200); // Vibração de 200ms
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,8 +54,10 @@ class _InsectListScreenState extends State<InsectListScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          icon:
+              const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
+            _vibrate(); // Vibração ao clicar no botão de voltar
             _flutterTts.stop(); // Para o TTS ao sair
             Navigator.pushReplacement(
               context,
@@ -59,8 +69,8 @@ class _InsectListScreenState extends State<InsectListScreen> {
       body: Column(
         children: [
           // Texto de instrução
-          Padding(
-            padding: const EdgeInsets.all(16.0),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
             child: Text(
               "Escolha um inseto da lista abaixo para ver mais informações.",
               textAlign: TextAlign.center,
@@ -80,7 +90,8 @@ class _InsectListScreenState extends State<InsectListScreen> {
                 return Card(
                   color: Colors.white,
                   elevation: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -88,15 +99,19 @@ class _InsectListScreenState extends State<InsectListScreen> {
                     contentPadding: const EdgeInsets.all(12),
                     title: Text(
                       insect.name,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
+                    trailing:
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 18),
                     onTap: () {
+                      _vibrate(); // Vibração ao escolher um inseto
                       _flutterTts.stop(); // Para o TTS ao mudar de tela
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => InsectDetailsScreen(insect: insect),
+                          builder: (context) =>
+                              InsectDetailsScreen(insect: insect),
                         ),
                       );
                     },
@@ -110,5 +125,3 @@ class _InsectListScreenState extends State<InsectListScreen> {
     );
   }
 }
-
-
