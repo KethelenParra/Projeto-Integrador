@@ -69,10 +69,10 @@ class _QuizScreenState extends State<QuizScreen> {
     resultText += "Sua resposta: ${question.options[userAnswer ?? 0]}. ";
     if (userAnswer == correctAnswer) {
       resultText +=
-          "Sua resposta está correta. O oque você deseja fazer? voltar pergunta, fechar correção ou proxima correção?";
+          "Sua resposta está correta. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
     } else {
       resultText +=
-          "Sua resposta está errada, a resposta correta é: ${question.options[correctAnswer]}. O oque você deseja fazer? voltar pergunta, fechar correção ou proxima correção?";
+          "Sua resposta está errada, a resposta correta é: ${question.options[correctAnswer]}. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
     }
     await _flutterTts.speak(resultText);
   }
