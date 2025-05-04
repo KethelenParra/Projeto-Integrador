@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vision_app_3d/screens/inserct.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
+import 'quiz_screen.dart';
+import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class InsectDetailsScreen extends StatefulWidget {
   final Insect insect;
@@ -34,6 +36,13 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     super.dispose();
   }
 
+  // Função para acionar a vibração personalizada
+  void _vibrate() async {
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(duration: 200); // vibração de 200ms
+    }
+  }
+
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _currentScrollPosition += 30;
@@ -56,7 +65,15 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
           style: const TextStyle(color: Colors.black),
         ),
         iconTheme: const IconThemeData(color: Colors.black),
-        automaticallyImplyLeading: true,
+        leading: IconButton(
+          icon:
+              const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          onPressed: () {
+            _vibrate(); // Vibração ao clicar no botão de voltar
+            _videoController.pause(); // Pausa o vídeo ao voltar
+            Navigator.pop(context);
+          },
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -73,7 +90,6 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             // Vídeo
             if (_videoController.value.isInitialized)
               AspectRatio(
@@ -82,29 +98,27 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
               )
             else
               const Center(child: CircularProgressIndicator()),
-
             const SizedBox(height: 20),
-
-            // Botão Pause
+            // Botão Pause/Play com vibração para ambas ações
             Center(
               child: ElevatedButton(
                 onPressed: () {
                   setState(() {
                     if (_videoController.value.isPlaying) {
+                      _vibrate(); // Vibração ao pausar o vídeo
                       _videoController.pause();
                     } else {
-                      _videoController.play(); // Opcional: pode reiniciar se pausado
+                      _vibrate(); // Vibração ao dar play
+                      _videoController.play();
                     }
                   });
                 },
                 child: Text(
-                  _videoController.value.isPlaying ? 'Pause' : 'Play', // Botão alternativo
+                  _videoController.value.isPlaying ? 'Pause' : 'Play',
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
             // Descrição com fundo fixo e animação
             Container(
               height: 300,
@@ -153,6 +167,37 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
                       },
                     ),
                   ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  _vibrate(); // Vibração ao clicar no botão "Fazer Quiz"
+                  if (_videoController.value.isPlaying) {
+                    _videoController.pause();
+                  }
+                  _videoController.seekTo(Duration.zero);
+                  setState(() {
+                    _currentScrollPosition = 0;
+                  });
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          QuizScreen(insectName: widget.insect.name),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEAB08A),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+                child: const Text(
+                  'Fazer Quiz',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
               ),
             ),

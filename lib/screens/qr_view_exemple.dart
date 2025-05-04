@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
 import 'insect_details_screen.dart';
 import 'package:vision_app_3d/screens/inserct.dart'; // Importar a classe Insect e o mapeamento insectData
+import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class QRViewExample extends StatefulWidget {
   const QRViewExample({super.key});
@@ -41,6 +42,13 @@ class _QRViewExampleState extends State<QRViewExample> {
     _flutterTts.stop(); // Para o TTS caso um código seja detectado
   }
 
+  // Função para acionar a vibração personalizada
+  void _vibrate() async {
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(duration: 200); // vibração de 200ms
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -53,8 +61,9 @@ class _QRViewExampleState extends State<QRViewExample> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
+            _vibrate(); // Vibração ao clicar no botão de voltar
             _flutterTts.stop(); // Interrompe qualquer leitura
             Navigator.pop(context); // Volta para a tela anterior
             _speakInstructions(); // Reproduz as instruções ao retornar
@@ -63,10 +72,10 @@ class _QRViewExampleState extends State<QRViewExample> {
       ),
       body: Column(
         children: [
-          Expanded(
+          const Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+              children: [
                 Text(
                   "Coloque o QR Code na área demarcada",
                   style: TextStyle(
@@ -100,12 +109,16 @@ class _QRViewExampleState extends State<QRViewExample> {
                       controller: controller,
                       onDetect: (barcodeCapture) {
                         if (!isScanCompleted) {
-                          final String code = barcodeCapture.barcodes.first.rawValue ?? '';
-                          print('Código escaneado: $code'); // Log para depuração
+                          final String code =
+                              barcodeCapture.barcodes.first.rawValue ?? '';
+                          print(
+                              'Código escaneado: $code'); // Log para depuração
                           if (insectData.containsKey(code)) {
                             final insect = insectData[code]!;
                             isScanCompleted = true;
-                            _flutterTts.stop(); // Para o TTS ao navegar para outra tela
+                            _flutterTts
+                                .stop(); // Para o TTS ao navegar para outra tela
+                            _vibrate(); // Vibração ao mudar de tela após leitura bem-sucedida
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -119,7 +132,9 @@ class _QRViewExampleState extends State<QRViewExample> {
                             });
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('QR Code não reconhecido: $code')),
+                              SnackBar(
+                                  content:
+                                      Text('QR Code não reconhecido: $code')),
                             );
                           }
                         }
