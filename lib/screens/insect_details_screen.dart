@@ -96,8 +96,7 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon:
-              const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
             _vibrate(); // Vibração ao clicar no botão de voltar
             _videoController.pause(); // Pausa o vídeo ao voltar
@@ -215,15 +214,13 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          QuizScreen(insectName: widget.insect.name),
+                      builder: (context) => QuizScreen(insectName: widget.insect.name),
                     ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEAB08A),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
                 child: const Text(
                   'Fazer Quiz',
