@@ -2,8 +2,10 @@
         package="com.example.vision_app_3d">
         <uses-permission android:name="android.permission.CAMERA"/>
         <uses-permission android:name="android.permission.INTERNET"/>
+        <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+        <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="vision_app_3d"
+        android:label="Vision"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
