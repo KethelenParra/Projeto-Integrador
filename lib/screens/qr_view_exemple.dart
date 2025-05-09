@@ -1,31 +1,46 @@
+// lib/screens/qr_view_example.dart
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import 'package:vibration/vibration.dart';
+
+import '../data/data_manager.dart';
+import '../data/data_definition.dart';
 import 'insect_details_screen.dart';
-import 'package:vision_app_3d/screens/inserct.dart'; // Importar a classe Insect e o mapeamento insectData
-import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class QRViewExample extends StatefulWidget {
   const QRViewExample({super.key});
 
   @override
-  State<StatefulWidget> createState() => _QRViewExampleState();
+  State<QRViewExample> createState() => _QRViewExampleState();
 }
 
 class _QRViewExampleState extends State<QRViewExample> {
-  final MobileScannerController controller = MobileScannerController();
-  final FlutterTts _flutterTts = FlutterTts(); // Instância do TTS
-  bool isScanCompleted = false;
+  final MobileScannerController _scannerController = MobileScannerController();
+  final FlutterTts _flutterTts = FlutterTts();
+  bool _isScanCompleted = false;
+
+  // Mapa de QR code para o `id` do inseto no banco
+  static const Map<String, int> _qrToId = {
+    'https://me-qr.com/0A5HBr4R': 1,
+    'https://me-qr.com/g6D9jaMj': 2,
+    'https://me-qr.com/8Mw6s4W6': 3,
+    'https://qr.me-qr.com/OX4GHmyo': 4,
+    'https://qr.me-qr.com/4IggFMux': 5,
+  };
 
   @override
   void initState() {
     super.initState();
-    _speakInstructions(); // Lê o texto assim que a tela é aberta
+    _speakInstructions();
   }
 
   @override
   void dispose() {
-    _flutterTts.stop(); // Para o TTS ao sair da tela
+    _flutterTts.stop();
+    _scannerController.dispose();
     super.dispose();
   }
 
@@ -37,15 +52,46 @@ class _QRViewExampleState extends State<QRViewExample> {
     );
   }
 
-  void closeScreen() {
-    isScanCompleted = false;
-    _flutterTts.stop(); // Para o TTS caso um código seja detectado
+  void _resetScanner() {
+    _isScanCompleted = false;
+    _flutterTts.stop();
+    _speakInstructions();
   }
 
-  // Função para acionar a vibração personalizada
-  void _vibrate() async {
-    if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: 200); // vibração de 200ms
+  Future<void> _onDetect(BarcodeCapture capture) async {
+    if (_isScanCompleted) return;
+
+    final code = capture.barcodes.first.rawValue ?? '';
+    if (code.isEmpty) return;
+
+    final manager = Provider.of<DataManager>(context, listen: false);
+
+    if (_qrToId.containsKey(code)) {
+      _isScanCompleted = true;
+      await _flutterTts.stop();
+      if (await Vibration.hasVibrator() ?? false) {
+        Vibration.vibrate(duration: 200);
+      }
+
+      final inseto = await manager.getInsetoById(_qrToId[code]!);
+      if (inseto != null) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => InsectDetailsScreen(inseto: inseto),
+          ),
+        );
+        _resetScanner();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Inseto não encontrado no banco!')),
+        );
+        _resetScanner();
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('QR Code não reconhecido: $code')),
+      );
     }
   }
 
@@ -55,45 +101,30 @@ class _QRViewExampleState extends State<QRViewExample> {
       backgroundColor: const Color(0xFFFCE6D8),
       appBar: AppBar(
         backgroundColor: const Color(0xFFEAB08A),
-        title: const Text(
-          'Escaneie o QR Code',
-          style: TextStyle(color: Colors.black),
-        ),
+        title: const Text('Escaneie o QR Code', style: TextStyle(color: Colors.black)),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () {
-            _vibrate(); // Vibração ao clicar no botão de voltar
-            _flutterTts.stop(); // Interrompe qualquer leitura
-            Navigator.pop(context); // Volta para a tela anterior
-            _speakInstructions(); // Reproduz as instruções ao retornar
+          onPressed: () async {
+            // Marcar como async para usar await aqui
+            if (await Vibration.hasVibrator() ?? false) {
+              Vibration.vibrate(duration: 100);
+            }
+            await _flutterTts.stop();
+            Navigator.pop(context);
+            _resetScanner();
           },
         ),
       ),
       body: Column(
         children: [
           const Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  "Coloque o QR Code na área demarcada",
-                  style: TextStyle(
-                    color: Colors.black87,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  "A leitura será feita automaticamente",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                  ),
-                ),
-              ],
+            child: Center(
+              child: Text(
+                "Coloque o QR Code na área demarcada\nA leitura será feita automaticamente",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
             ),
           ),
           Expanded(
@@ -102,65 +133,19 @@ class _QRViewExampleState extends State<QRViewExample> {
               child: Container(
                 width: 250,
                 height: 250,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    MobileScanner(
-                      controller: controller,
-                      onDetect: (barcodeCapture) {
-                        if (!isScanCompleted) {
-                          final String code =
-                              barcodeCapture.barcodes.first.rawValue ?? '';
-                          print(
-                              'Código escaneado: $code'); // Log para depuração
-                          if (insectData.containsKey(code)) {
-                            final insect = insectData[code]!;
-                            isScanCompleted = true;
-                            _flutterTts
-                                .stop(); // Para o TTS ao navegar para outra tela
-                            _vibrate(); // Vibração ao mudar de tela após leitura bem-sucedida
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => InsectDetailsScreen(
-                                  insect: insect,
-                                ),
-                              ),
-                            ).then((_) {
-                              closeScreen(); // Reseta a tela após a navegação
-                              _speakInstructions(); // Reproduz as instruções novamente
-                            });
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('QR Code não reconhecido: $code')),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.blue, width: 4),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ],
+                decoration: BoxDecoration(border: Border.all(color: Colors.blue, width: 4), borderRadius: BorderRadius.circular(12)),
+                child: MobileScanner(
+                  controller: _scannerController,
+                  onDetect: (capture) => _onDetect(capture),
                 ),
               ),
             ),
           ),
-          Expanded(
-            child: Container(
-              alignment: Alignment.center,
-              child: const Text(
+          const Expanded(
+            child: Center(
+              child: Text(
                 "Developed by Estudantes",
-                style: TextStyle(
-                  color: Colors.black87,
-                  fontSize: 14,
-                  letterSpacing: 1,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.black54),
               ),
             ),
           ),
