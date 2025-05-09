@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:vision_app_3d/screens/home_page.dart';
+import 'package:vision_app_3d/service/speechService.dart';
 import 'insect_details_screen.dart';
 import 'package:vision_app_3d/screens/insect.dart'; // Importar a classe Insect e o mapeamento insectData
-
+// TODO organizar esta parte
 class QRViewExample extends StatefulWidget {
   const QRViewExample({super.key});
 
@@ -15,63 +16,126 @@ class QRViewExample extends StatefulWidget {
 class _QRViewExampleState extends State<QRViewExample> {
   final MobileScannerController controller = MobileScannerController();
   final FlutterTts _flutterTts = FlutterTts(); // Instância do TTS
-  final stt.SpeechToText _speechToText = stt.SpeechToText();
+  final SpeechService _speechService = SpeechService();
   bool isScanCompleted = false;
   bool _isListening = false;
+  bool _isSpeaking = false;
 
   @override
   void initState() {
     super.initState();
-    _speakInstructions(); // Lê o texto assim que a tela é aberta
-    _initSpeech();
+    _configureTts().then((_) => _speakInstructions());
+    _initSpeechService();
   }
 
   @override
   void dispose() {
-    _flutterTts.stop(); // Para o TTS ao sair da tela
-    _speechToText.stop();
+    _flutterTts.stop();
+    _speechService.stop(); // Para o serviço de voz
     super.dispose();
+  }
+
+  Future<void> _configureTts() async {
+    _flutterTts.setStartHandler(() {
+      setState(() {
+        _isSpeaking = true;
+        _isListening = false;
+      });
+      _speechService.stop();
+    });
+
+    _flutterTts.setCompletionHandler(() async {
+      setState(() => _isSpeaking = false);
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) _startListening();
+    });
+
+    _flutterTts.setErrorHandler((msg) {
+      setState(() => _isSpeaking = false);
+      if (mounted) _startListening();
+    });
+
+    await _flutterTts.setLanguage("pt-BR");
+    await _flutterTts.setSpeechRate(0.6);
   }
 
   Future<void> _speakInstructions() async {
     await _flutterTts.setLanguage("pt-BR");
     await _flutterTts.setSpeechRate(0.6);
     await _flutterTts.speak(
-      "Aponte o celular para o QR Code. Coloque o QR Code na área demarcada. A leitura será feita automaticamente.",
+      "Aponte o celular para o QR Code. Coloque o QR Code na área demarcada. "
+          "A leitura será feita automaticamente. "
+          "Diga 'voltar' para retornar.",
     );
   }
 
-  Future<void> _initSpeech() async{
-    bool available = await _speechToText.initialize(
-      onStatus: (status) {
-        if (status == 'done'){
-          setState(() => _isListening = false);
-        }
-      },
-      onError: (error) => print("Erro: $error"),
-    );
-
-    if(available){
-      _startListening();
-    }
-  }
-
-  void _startListening() async{
-    if(!_isListening){
-      await _speechToText.listen(
-        onResult: (result){
-          if (result.recognizedWords.toLowerCase() == "voltar"){
-            _navigateBackToHome();
-          }
-        },
-        localeId: "pt-BR",
+  Future<void> _initSpeechService() async {
+    bool initialized = await _speechService.initialize(context: context);
+    if (!initialized && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Falha ao inicializar reconhecimento de voz")),
       );
     }
   }
 
-  void _navigateBackToHome(){
-    _speechToText.stop(); // Para a escuta antes de navegar
-    Navigator.pop(context); // Volta para a tela inicial
+  Future<void> _startListening() async {
+    if (_isSpeaking || !mounted || !_speechService.isInitialized) return;
+
+    try {
+      await _speechService.stop();
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      await _speechService.listen(
+        onResult: (command) {
+          if (command.isNotEmpty) _handleVoiceCommand(command);
+        },
+        localeId: "pt-BR",
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 2),
+        onSoundLevelChange: (level) {
+          if (level > 0) print("Nível de som: $level dB");
+        },
+      );
+
+      setState(() => _isListening = true);
+    } catch (e) {
+      print("Erro ao iniciar escuta: $e");
+      if (mounted) setState(() => _isListening = false);
+    }
+  }
+
+  void _handleVoiceCommand(String command) {
+    final lowerCaseCommand = command.toLowerCase();
+    print("Comando recebido: $lowerCaseCommand");
+
+    if (_matchesCommand(lowerCaseCommand, 'voltar')) {
+      _navigateBackToHome();
+    }
+  }
+
+  bool _matchesCommand(String input, String command) {
+    final variations = {
+      'voltar': [
+        'voltar',
+        'volta',
+        'retornar',
+        'retorna',
+        'voltar para trás',
+        'vai voltar',
+        'ir para trás',
+        'voltar menu',
+        'voltar início',
+      ],
+    };
+    return variations[command]?.any((variant) => input.contains(variant)) ?? false;
+  }
+
+  void _navigateBackToHome() {
+    _speechService.stop();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const HomePage()),
+    );
   }
 
   void closeScreen() {

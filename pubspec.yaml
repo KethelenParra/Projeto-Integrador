@@ -42,14 +42,16 @@ dependencies:
   animated_text_kit: ^4.2.2
   flutter_launcher_icons: ^0.14.1
   speech_to_text: ^7.0.0
-  permission_handler: ^11.0.1
+  permission_handler: ^12.0.0+1
   vibration: ^3.1.3
+  diacritic: ^0.1.3
+  shared_preferences: ^2.2.2
 
 flutter_icons:
   android: true
   image_path: "assets/icon/logo.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
- 
+
 
 dev_dependencies:
   flutter_test:
@@ -60,7 +62,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^4.0.0
+  flutter_lints: ^5.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -73,13 +75,13 @@ flutter:
     - lib/assets/videos/inseto3.mp4
     - lib/assets/videos/inseto4.mp4
     - lib/assets/videos/inseto5.mp4
-   
+
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
- 
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
