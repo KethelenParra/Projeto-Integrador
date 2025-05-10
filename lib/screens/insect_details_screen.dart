@@ -210,44 +210,6 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     }
   }
 
-  // Função para começar a escutar o comando de voz
-/*
-  void _listenForCommand() async {
-    if (!_isListening) {
-      bool available = await _speechToText.listen(
-        onResult: (result) {
-          String command = result.recognizedWords.toLowerCase();
-          if (command.contains("quiz")) {
-            _vibrate(); // Vibração ao reconhecer o comando
-            if (_videoController.value.isPlaying) {
-              _videoController.pause();
-            }
-            _videoController.seekTo(Duration.zero);
-            setState(() {
-              _currentScrollPosition = 0;
-            });
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => QuizScreen(insectName: widget.insect.name),
-              ),
-            );
-          } else if (command.contains("voltar")) {
-            _vibrate(); // Vibração ao reconhecer o comando
-            _videoController.pause(); // Pausa o vídeo ao voltar
-            Navigator.pop(context);
-          }
-        },
-      );
-      if (available) {
-        setState(() {
-          _isListening = true;
-        });
-      }
-    }
-  }
-*/
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

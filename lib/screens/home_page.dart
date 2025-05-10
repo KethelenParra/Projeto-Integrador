@@ -1,9 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:vision_app_3d/service/speechService.dart';
 import '../screens/qr_view_exemple.dart';
 import '../screens/insect_list_screen.dart';
@@ -22,7 +19,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isSpeaking = false;
   int _selectedIndex = 0;
   bool _isInitialized = false;
-  int _retryCount = 0;
   bool _wasCompletedClosed = true;
 
   @override
@@ -32,7 +28,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _initialize();
   }
 
-  Future<void> _initialize() async{
+  Future<void> _initialize() async {
     if (_isInitialized) return;
 
     setState(() => _isInitialized = true);
@@ -112,7 +108,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await _startContinuousListening();
     } catch (e) {
       print("Erro ao iniciar escuta, tentativa ${retryCount + 1}: $e");
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(seconds: 2));
       if (mounted) {
         await _startContinuousListeningWithRetry(retryCount: retryCount + 1);
       }
@@ -168,7 +164,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           }
         },
         localeId: 'pt_BR',
-        listenFor: const Duration(seconds: 10),
+        listenFor: const Duration(minutes: 10),
         // Aumente o tempo
         pauseFor: const Duration(seconds: 2),
         onSoundLevelChange: (level) {
@@ -228,42 +224,66 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _handleListeningError(dynamic error) async {
-    print("Tratando erro de escuta: $error");
-
-    if (_retryCount < 3) {
-      _retryCount++;
-      print("Tentativa $_retryCount de reiniciar escuta");
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted && !_isSpeaking) {
-        await _startContinuousListening();
-      }
-    } else {
-      _retryCount = 0;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Problema com o microfone. Tente novamente.")),
-        );
-      }
-    }
-  }
-
   bool _matchesCommand(String input, String command) {
     final variations = {
       'escanear': [
-        'escanear', 'escaner', 'scan', 'scanner', 'scannear',
-        'escanea', 'escan', 'escaniar', 'eskanear', 'escanearr',
-        'escane', 'escan', 'escania', 'escanne', 'escanear',
-        'eskenear', 'eskaner', 'esc', 'esca', 'escanir', // Mais variações
+        'escanear',
+        'escaner',
+        'scan',
+        'scanner',
+        'scannear',
+        'escanea',
+        'escan',
+        'escaniar',
+        'eskanear',
+        'escanearr',
+        'escane',
+        'escan',
+        'escania',
+        'escanne',
+        'escanear',
+        'eskenear',
+        'eskaner',
+        'esc',
+        'esca',
+        'escanir',
       ],
       'lista': [
-        'lista', 'list', 'listar', 'listas', 'lissta',
-        'listaa', 'lis', 'listinha', 'listah', 'lixta',
-        'lishta', 'lesta', 'lest', 'listo', 'listu',
-        'listh', 'liista', 'leesta', 'listta', 'lizta',
-        'listea', 'listi', 'lisst', 'listae', 'listra',
-        'list', 'listar', 'list', 'listarr', 'listre', // Mais variações
-        'listara', 'listas', 'listir', 'listare', 'listor',
+        'lista',
+        'list',
+        'listar',
+        'listas',
+        'lissta',
+        'listaa',
+        'lis',
+        'listinha',
+        'listah',
+        'lixta',
+        'lishta',
+        'lesta',
+        'lest',
+        'listo',
+        'listu',
+        'listh',
+        'liista',
+        'leesta',
+        'listta',
+        'lizta',
+        'listea',
+        'listi',
+        'lisst',
+        'listae',
+        'listra',
+        'list',
+        'listar',
+        'list',
+        'listarr',
+        'listre',
+        'listara',
+        'listas',
+        'listir',
+        'listare',
+        'listor',
       ],
       'voltar': [
         'voltar',
@@ -316,11 +336,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  void _navigateToScreen(Widget screen) async{
+  void _navigateToScreen(Widget screen) async {
     await _stopAllAudio();
     await Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
 
-    if (mounted){
+    if (mounted) {
       _initializeVoiceFeatures();
     }
   }
@@ -359,6 +379,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  // Mexer nele depois para verificação de estado
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
@@ -379,7 +400,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         break;
     }
   }
-
 
   void _onItemTapped(int index) {
     _vibrate();
@@ -442,7 +462,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   'Obrigado por utilizar o Vision App, um aplicativo dedicado'
-                      ' a promover o aprendizado sobre o mundo dos insetos de forma inclusiva, para explorar e descobrir informações sobre diferentes espécies de insetos, com recursos em áudio, vídeos e através da experiência com as mãos. Viva uma experiência interessante.',
+                  ' a promover o aprendizado sobre o mundo dos insetos de forma inclusiva, para explorar e descobrir informações sobre diferentes espécies de insetos, com recursos em áudio, vídeos e através da experiência com as mãos. Viva uma experiência interessante.',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.black,
