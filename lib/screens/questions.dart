@@ -11,9 +11,10 @@ class Question {
   }) : optionVoiceCommands = _generateOptionCommands(options);
 
   // Gera variações de comandos de voz para cada opção
-  static Map<String, List<String>> _generateOptionCommands(List<String> options) {
+  static Map<String, List<String>> _generateOptionCommands(
+      List<String> options) {
     Map<String, List<String>> commands = {};
-    
+
     for (int i = 0; i < options.length; i++) {
       final number = i + 1;
       commands['opção $number'] = [
@@ -53,12 +54,37 @@ class Question {
 
   static String _numberToWord(int number) {
     const words = {
-      1: ['um', 'hum', 'primeiro', 'primeira', 'primeira opção', 'primera opção', 'primeira opição'],
-      2: ['dois', 'duas', 'segundo', 'segunda', 'segunda opção', 'segunda opição'],
-      3: ['três', 'tres', 'terceiro', 'terceira', 'terceira opção', 'terceira opição', 'tercera opção', 'tercera opição'],
+      1: [
+        'um',
+        'hum',
+        'primeiro',
+        'primeira',
+        'primeira opção',
+        'primera opção',
+        'primeira opição'
+      ],
+      2: [
+        'dois',
+        'duas',
+        'segundo',
+        'segunda',
+        'segunda opção',
+        'segunda opição'
+      ],
+      3: [
+        'três',
+        'tres',
+        'terceiro',
+        'terceira',
+        'terceira opção',
+        'terceira opição',
+        'tercera opção',
+        'tercera opição'
+      ],
       4: ['quatro', 'quarta', 'quarto', 'quarta opção', 'quarta opição'],
     };
-    return words[number]?.first ?? number.toString(); // Retorna apenas a primeira variação
+    return words[number]?.first ??
+        number.toString(); // Retorna apenas a primeira variação
   }
 
   // Verifica se um comando de voz corresponde a uma opção
@@ -67,8 +93,7 @@ class Question {
     print("Verificando comando: $command"); // Debug
 
     // Tratamento especial para o número "um"
-    if (command == "um" || command == "hum")
-      return 0;
+    if (command == "um" || command == "hum") return 0;
 
     for (var entry in optionVoiceCommands.entries) {
       if (entry.value.any((variant) {
@@ -82,31 +107,40 @@ class Question {
     return null;
   }
 
-  // Variações adicionais para comandos de navegação
+  /// Comandos de navegação (“próximo”, “anterior”, “confirmar”)
   static final Map<String, List<String>> navigationCommands = {
-    'próximo': [
-      'próximo', 'próxima', 'avançar', 'seguinte', 'continuar',
-      'passar', 'próxima questão', 'próxima pergunta', 'avançar questão',
-      'próximo', 'próxima', 'seguinte', 'avança', 'continua'
+    'próxima pergunta': [
+      'próximo',
+      'próxima',
+      'avançar',
+      'seguinte',
+      'continuar',
+      'passar',
+      'próxima pergunta',
+      'avançar questão'
     ],
-    'anterior': [
-      'anterior', 'voltar', 'retornar', 'volta', 'retorna',
-      'questão anterior', 'pergunta anterior', 'voltar questão',
-      'anterior', 'volta', 'retorna', 'voltando', 'retornando'
+    'voltar pergunta': [
+      'anterior',
+      'voltar',
+      'retornar',
+      'questão anterior',
+      'pergunta anterior'
     ],
-    'confirmar': [
-      'confirmar', 'confirma', 'finalizar', 'terminar', 'concluir',
-      'confirmar respostas', 'finalizar quiz', 'terminar quiz',
-      'concluir quiz', 'pronto', 'terminei', 'acabei'
-    ]
+    'finalizar': [
+      'confirmar',
+      'finalizar',
+      'terminar',
+      'concluir',
+      'pronto',
+      'terminei'
+    ],
   };
 
-  // Verifica comandos de navegação
+  /// Retorna a chave do comando de navegação identificado, ou null
   static String? matchNavigationCommand(String command) {
-    command = command.toLowerCase().trim();
-    
+    final cmd = command.toLowerCase();
     for (var entry in navigationCommands.entries) {
-      if (entry.value.any((variant) => command.contains(variant.toLowerCase()))) {
+      if (entry.value.any((variant) => cmd.contains(variant))) {
         return entry.key;
       }
     }
@@ -120,7 +154,12 @@ class Questions {
     'Escorpião': [
       Question(
         question: 'Qual é a principal característica dos escorpiões?',
-        options: ['Possuem asas', 'Têm ferrão venenoso', 'São mamíferos', 'Vivem na água'],
+        options: [
+          'Possuem asas',
+          'Têm ferrão venenoso',
+          'São mamíferos',
+          'Vivem na água'
+        ],
         correctIndex: 1,
       ),
       Question(
@@ -140,14 +179,24 @@ class Questions {
       ),
       Question(
         question: 'Como se reproduzem?',
-        options: ['Botam ovos', 'Fazem metamorfose', 'Dançam antes do acasalamento', 'Vivem em grupos familiares'],
+        options: [
+          'Botam ovos',
+          'Fazem metamorfose',
+          'Dançam antes do acasalamento',
+          'Vivem em grupos familiares'
+        ],
         correctIndex: 2,
       ),
     ],
     'Borboleta': [
       Question(
         question: 'Qual é a principal função das borboletas na natureza?',
-        options: ['Produzir mel', 'Ajudar na polinização', 'Caçar insetos', 'Comer folhas'],
+        options: [
+          'Produzir mel',
+          'Ajudar na polinização',
+          'Caçar insetos',
+          'Comer folhas'
+        ],
         correctIndex: 1,
       ),
       Question(
@@ -157,12 +206,22 @@ class Questions {
       ),
       Question(
         question: 'Como as borboletas se alimentam?',
-        options: ['Comem carne', 'Sugam néctar com a probóscide', 'Mastigam folhas', 'Bebem água'],
+        options: [
+          'Comem carne',
+          'Sugam néctar com a probóscide',
+          'Mastigam folhas',
+          'Bebem água'
+        ],
         correctIndex: 1,
       ),
       Question(
         question: 'O que acontece na fase da pupa (crisálida)?',
-        options: ['A borboleta morre', 'A borboleta hiberna', 'A metamorfose acontece', 'A borboleta põe ovos'],
+        options: [
+          'A borboleta morre',
+          'A borboleta hiberna',
+          'A metamorfose acontece',
+          'A borboleta põe ovos'
+        ],
         correctIndex: 2,
       ),
       Question(
@@ -174,7 +233,12 @@ class Questions {
     'Barbeiro': [
       Question(
         question: 'Por que o barbeiro é perigoso?',
-        options: ['Ele pica e transmite a Doença de Chagas', 'Tem veneno mortal', 'Causa alergias severas', 'Se alimenta de plantas tóxicas'],
+        options: [
+          'Ele pica e transmite a Doença de Chagas',
+          'Tem veneno mortal',
+          'Causa alergias severas',
+          'Se alimenta de plantas tóxicas'
+        ],
         correctIndex: 0,
       ),
       Question(
@@ -189,7 +253,12 @@ class Questions {
       ),
       Question(
         question: 'Onde os barbeiros costumam se esconder?',
-        options: ['Embaixo da água', 'Em frestas e ninhos', 'Nas árvores', 'No ar'],
+        options: [
+          'Embaixo da água',
+          'Em frestas e ninhos',
+          'Nas árvores',
+          'No ar'
+        ],
         correctIndex: 1,
       ),
       Question(
@@ -201,17 +270,32 @@ class Questions {
     'Abelha': [
       Question(
         question: 'Qual a principal função das abelhas para o meio ambiente?',
-        options: ['Fazer mel', 'Polinizar plantas', 'Caçar insetos', 'Produzir geleia real'],
+        options: [
+          'Fazer mel',
+          'Polinizar plantas',
+          'Caçar insetos',
+          'Produzir geleia real'
+        ],
         correctIndex: 1,
       ),
       Question(
         question: 'Como as abelhas se comunicam?',
-        options: ['Através de danças', 'Pelo canto', 'Com sinais de luz', 'Pelo cheiro'],
+        options: [
+          'Através de danças',
+          'Pelo canto',
+          'Com sinais de luz',
+          'Pelo cheiro'
+        ],
         correctIndex: 0,
       ),
       Question(
         question: 'O que a abelha rainha faz?',
-        options: ['Produz mel', 'Põe ovos', 'Defende a colmeia', 'Poliniza flores'],
+        options: [
+          'Produz mel',
+          'Põe ovos',
+          'Defende a colmeia',
+          'Poliniza flores'
+        ],
         correctIndex: 1,
       ),
       Question(
@@ -237,7 +321,8 @@ class Questions {
         correctIndex: 1,
       ),
       Question(
-        question: 'Qual o nome das partes que a aranha usa para injetar veneno?',
+        question:
+            'Qual o nome das partes que a aranha usa para injetar veneno?',
         options: ['Patas', 'Quelíceras', 'Garras', 'Asas'],
         correctIndex: 1,
       ),
@@ -248,7 +333,12 @@ class Questions {
       ),
       Question(
         question: 'Como as caranguejeiras se defendem?',
-        options: ['Fugindo', 'Soltando pelos urticantes', 'Atacando humanos', 'Fazendo barulho'],
+        options: [
+          'Fugindo',
+          'Soltando pelos urticantes',
+          'Atacando humanos',
+          'Fazendo barulho'
+        ],
         correctIndex: 1,
       ),
     ],

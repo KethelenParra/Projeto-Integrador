@@ -18,28 +18,35 @@ class _QuizScreenState extends State<QuizScreen> {
   int _currentQuestionIndex = 0;
   int? _selectedAnswer;
   bool _isAnswered = false;
-  List<int?> _answers = List.filled(5, null);
+  late List<int?> _answers;
+
   final SpeechService _speechService = SpeechService();
   bool _isListening = false;
-
   late FlutterTts _flutterTts;
+
+  // Para navegação por voz no diálogo de resultados
+  late PageController _resultPageController;
+  bool _inResultMode = false;
 
   @override
   void initState() {
     super.initState();
     _flutterTts = FlutterTts();
+    _answers = List<int?>.filled(
+      Questions.questionsMap[widget.insectName]!.length,
+      null,
+    );
+    _resultPageController = PageController();
     _configureTts();
-    _initializeSpeech(); // Adicione esta linha
-    // Aguarda um pequeno delay para garantir que o TTS esteja pronto
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _speakCurrentQuestion();
-    });
+    _initializeSpeech();
+    Future.delayed(const Duration(milliseconds: 500), _speakCurrentQuestion);
   }
 
   @override
   void dispose() {
     _flutterTts.stop();
     _speechService.stop();
+    _resultPageController.dispose();
     super.dispose();
   }
 
@@ -50,45 +57,92 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Future<void> _startListening() async {
     if (_isListening) return;
-
     await _speechService.listen(
-      onResult: (command) {
-        if (command.trim().isNotEmpty) {
-          _handleVoiceCommand(command);
-        }
-      },
+      onResult: (command) => _handleVoiceCommand(command),
       localeId: 'pt_BR',
       listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3), onSoundLevelChange: (level) {  },
+      pauseFor: const Duration(seconds: 3),
+      onSoundLevelChange: (level) {},
     );
-
     setState(() => _isListening = true);
   }
 
   void _handleVoiceCommand(String command) {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    final cmd = command.toLowerCase().trim();
 
-    // Tenta encontrar uma opção correspondente
+    if (_inResultMode) {
+      // Comandos no diálogo de resultados
+      if (cmd.contains('voltar pergunta') || cmd.contains('voltar correção')) {
+        _vibrate();
+        _flutterTts.stop();
+        if (_resultPageController.page! > 0) {
+          _resultPageController.previousPage(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      } else if (cmd.contains('próxima pergunta') ||
+          cmd.contains('próxima correção')) {
+        _vibrate();
+        _flutterTts.stop();
+        final total = Questions.questionsMap[widget.insectName]!.length;
+        if (_resultPageController.page! < total - 1) {
+          _resultPageController.nextPage(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      } else if (cmd.contains('fechar correção')) {
+        _vibrate();
+        _flutterTts.stop();
+        Navigator.pop(context); // fecha diálogo
+        _inResultMode = false;
+      }
+      return;
+    }
+
+    // Comandos gerais: sair do quiz
+    if (cmd.contains('voltar tela') ||
+        cmd.contains('sair quiz') ||
+        cmd == 'sair') {
+      _vibrate();
+      _speechService.stop();
+      _flutterTts.stop();
+      Navigator.of(context).pop();
+      return;
+    }
+
+    // Seleção de opção
+    final currentQuestion =
+        Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
     final optionIndex = currentQuestion.matchVoiceCommand(command);
     if (optionIndex != null) {
       setState(() {
         _selectedAnswer = optionIndex;
         _isAnswered = true;
       });
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (_currentQuestionIndex ==
+            Questions.questionsMap[widget.insectName]!.length - 1) {
+          _showResultDialog();
+        } else {
+          _nextQuestion();
+        }
+      });
       return;
     }
 
-    // Verifica comandos de navegação
-    final navigationCommand = Question.matchNavigationCommand(command);
-    if (navigationCommand != null) {
-      switch (navigationCommand) {
-        case 'próximo':
-          if (_isAnswered) _nextQuestion();
-          break;
-        case 'anterior':
+    // Navegação por pergunta
+    final nav = Question.matchNavigationCommand(command);
+    if (nav != null) {
+      switch (nav) {
+        case 'voltar pergunta':
           _previousQuestion();
           break;
-        case 'confirmar':
+        case 'próxima pergunta':
+          if (_isAnswered) _nextQuestion();
+          break;
+        case 'finalizar':
           if (_isAnswered) _showResultDialog();
           break;
       }
@@ -99,7 +153,7 @@ class _QuizScreenState extends State<QuizScreen> {
   void _configureTts() async {
     await _flutterTts.setLanguage("pt-BR");
     await _flutterTts.setSpeechRate(0.6);
-    
+
     _flutterTts.setStartHandler(() {
       setState(() => _isListening = false);
       _speechService.stop();
@@ -126,14 +180,32 @@ class _QuizScreenState extends State<QuizScreen> {
 
   // Faz o TTS ler a pergunta atual e as opções
   Future<void> _speakCurrentQuestion() async {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
-    String questionText = currentQuestion.question;
-    List<String> options = currentQuestion.options;
-    String ttsMessage = "Pergunta ${_currentQuestionIndex + 1}: $questionText. ";
-    for (int i = 0; i < options.length; i++) {
-      ttsMessage += "Opção ${i + 1}: ${options[i]}. ";
+    final questions = Questions.questionsMap[widget.insectName]!;
+    final total = questions.length;
+    final idx = _currentQuestionIndex;
+    final question = questions[idx];
+
+    // 1) Monta a base da mensagem
+    String ttsMessage = "Pergunta ${idx + 1} de $total: ${question.question}. ";
+    for (int i = 0; i < question.options.length; i++) {
+      ttsMessage += "Opção ${i + 1}: ${question.options[i]}. ";
     }
     ttsMessage += "Fale a opção desejada.";
+
+    // 2) Se puder voltar, informa o comando
+    if (idx > 0) {
+      ttsMessage += " Para voltar à pergunta anterior, diga “voltar pergunta”.";
+    }
+
+    // 3) Se já respondeu E não for a última, informa como avançar
+    if (_isAnswered && idx < total - 1) {
+      ttsMessage +=
+          " Quando quiser ir para a próxima pergunta, diga “próxima pergunta”.";
+    }
+
+    ttsMessage +=
+        " Para sair do quiz e voltar aos detalhes do inseto, diga “voltar tela”.";
+
     await _flutterTts.speak(ttsMessage);
   }
 
@@ -152,7 +224,8 @@ class _QuizScreenState extends State<QuizScreen> {
     String resultText = "Pergunta ${index + 1}: ${question.question}. ";
     resultText += "Sua resposta: ${question.options[userAnswer ?? 0]}. ";
     if (userAnswer == correctAnswer) {
-      resultText += "Sua resposta está correta. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
+      resultText +=
+          "Sua resposta está correta. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
     } else {
       resultText +=
           "Sua resposta está errada, a resposta correta é: ${question.options[correctAnswer]}. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
@@ -169,12 +242,14 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() {
       _answers[_currentQuestionIndex] = _selectedAnswer;
 
-      final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+      final currentQuestion =
+          Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
       if (_selectedAnswer == currentQuestion.correctIndex) {
         _score++;
       }
 
-      if (_currentQuestionIndex < Questions.questionsMap[widget.insectName]!.length - 1) {
+      if (_currentQuestionIndex <
+          Questions.questionsMap[widget.insectName]!.length - 1) {
         _currentQuestionIndex++;
         _selectedAnswer = _answers[_currentQuestionIndex];
         _isAnswered = _selectedAnswer != null;
@@ -214,7 +289,8 @@ class _QuizScreenState extends State<QuizScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // O usuário deve clicar no botão "Fechar" para sair
+      barrierDismissible:
+          false, // O usuário deve clicar no botão "Fechar" para sair
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: SizedBox(
@@ -232,7 +308,8 @@ class _QuizScreenState extends State<QuizScreen> {
                   },
                   itemCount: Questions.questionsMap[widget.insectName]!.length,
                   itemBuilder: (context, index) {
-                    final question = Questions.questionsMap[widget.insectName]![index];
+                    final question =
+                        Questions.questionsMap[widget.insectName]![index];
                     final userAnswer = _answers[index];
                     final correctAnswer = question.correctIndex;
                     return Padding(
@@ -259,7 +336,9 @@ class _QuizScreenState extends State<QuizScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: userAnswer == correctAnswer ? Colors.green : Colors.red,
+                              color: userAnswer == correctAnswer
+                                  ? Colors.green
+                                  : Colors.red,
                             ),
                           ),
                           Container(
@@ -267,10 +346,14 @@ class _QuizScreenState extends State<QuizScreen> {
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.symmetric(vertical: 5),
                             decoration: BoxDecoration(
-                              color: userAnswer == correctAnswer ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+                              color: userAnswer == correctAnswer
+                                  ? Colors.green.withOpacity(0.3)
+                                  : Colors.red.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: userAnswer == correctAnswer ? Colors.green : Colors.red,
+                                color: userAnswer == correctAnswer
+                                    ? Colors.green
+                                    : Colors.red,
                                 width: 2,
                               ),
                             ),
@@ -279,7 +362,9 @@ class _QuizScreenState extends State<QuizScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: userAnswer == correctAnswer ? Colors.green[800] : Colors.red[800],
+                                color: userAnswer == correctAnswer
+                                    ? Colors.green[800]
+                                    : Colors.red[800],
                               ),
                             ),
                           ),
@@ -322,7 +407,8 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -346,7 +432,8 @@ class _QuizScreenState extends State<QuizScreen> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEAB08A),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
                       ),
                       child: const Text(
                         'Fechar',
@@ -359,7 +446,9 @@ class _QuizScreenState extends State<QuizScreen> {
                     IconButton(
                       onPressed: () {
                         _vibrate(); // Vibração ao clicar no botão de avançar do diálogo
-                        if (_pageController.page! < Questions.questionsMap[widget.insectName]!.length - 1) {
+                        if (_pageController.page! <
+                            Questions.questionsMap[widget.insectName]!.length -
+                                1) {
                           _pageController.nextPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut,
@@ -380,7 +469,8 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    final currentQuestion =
+        Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCE6D8),
@@ -388,7 +478,8 @@ class _QuizScreenState extends State<QuizScreen> {
         title: Text('Quiz sobre ${widget.insectName}'),
         backgroundColor: const Color(0xFFEAB08A),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          icon:
+              const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
             _vibrate(); // Vibração ao clicar no botão de voltar
             _flutterTts.stop();
@@ -426,7 +517,8 @@ class _QuizScreenState extends State<QuizScreen> {
                   // Pequeno delay para dar feedback visual da seleção
 
                   Future.delayed(const Duration(milliseconds: 500), () {
-                    if (_currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1) {
+                    if (_currentQuestionIndex ==
+                        Questions.questionsMap[widget.insectName]!.length - 1) {
                       _showResultDialog(); // Se for a última pergunta, mostra o resultado
                     } else {
                       _nextQuestion(); // Se não for a última, vai para a próxima
@@ -440,10 +532,14 @@ class _QuizScreenState extends State<QuizScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
-                  onPressed: _currentQuestionIndex > 0 ? _previousQuestion : null,
+                  onPressed:
+                      _currentQuestionIndex > 0 ? _previousQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _currentQuestionIndex > 0 ? Colors.grey : Colors.grey.shade400,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    backgroundColor: _currentQuestionIndex > 0
+                        ? Colors.grey
+                        : Colors.grey.shade400,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                   ),
                   child: const Text(
                     'Voltar',
@@ -453,11 +549,15 @@ class _QuizScreenState extends State<QuizScreen> {
                 ElevatedButton(
                   onPressed: _isAnswered ? _nextQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    backgroundColor:
+                        _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                   ),
                   child: Text(
-                    _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1
+                    _currentQuestionIndex ==
+                            Questions.questionsMap[widget.insectName]!.length -
+                                1
                         ? 'Confirmar Respostas'
                         : 'Próxima Pergunta',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
