@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:flutter_tts/flutter_tts.dart'; // Importar o pacote para leitura de texto
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:vision_app_3d/screens/home_page.dart';
 import 'package:vision_app_3d/service/speechService.dart';
 import 'insect_details_screen.dart';
-import 'package:vision_app_3d/screens/insect.dart'; // Importar a classe Insect e o mapeamento insectData
-// TODO organizar esta parte
+import 'package:vision_app_3d/screens/insect.dart';
+
 class QRViewExample extends StatefulWidget {
   const QRViewExample({super.key});
 
@@ -15,7 +15,7 @@ class QRViewExample extends StatefulWidget {
 
 class _QRViewExampleState extends State<QRViewExample> {
   final MobileScannerController controller = MobileScannerController();
-  final FlutterTts _flutterTts = FlutterTts(); // Instância do TTS
+  final FlutterTts _flutterTts = FlutterTts();
   final SpeechService _speechService = SpeechService();
   bool isScanCompleted = false;
   bool _isListening = false;
@@ -31,7 +31,7 @@ class _QRViewExampleState extends State<QRViewExample> {
   @override
   void dispose() {
     _flutterTts.stop();
-    _speechService.stop(); // Para o serviço de voz
+    _speechService.stop();
     super.dispose();
   }
 
@@ -90,8 +90,8 @@ class _QRViewExampleState extends State<QRViewExample> {
           if (command.isNotEmpty) _handleVoiceCommand(command);
         },
         localeId: "pt-BR",
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 2),
+        listenFor: const Duration(seconds: 120), // Aumentado de 10s para 120s
+        pauseFor: const Duration(seconds: 5), // Aumentado de 2s para 5s
         onSoundLevelChange: (level) {
           if (level > 0) print("Nível de som: $level dB");
         },
@@ -117,6 +117,9 @@ class _QRViewExampleState extends State<QRViewExample> {
     final variations = {
       'voltar': [
         'voltar',
+        'votar',
+        'votá',
+        'voltá',
         'volta',
         'retornar',
         'retorna',
@@ -140,7 +143,7 @@ class _QRViewExampleState extends State<QRViewExample> {
 
   void closeScreen() {
     isScanCompleted = false;
-    _flutterTts.stop(); // Para o TTS caso um código seja detectado
+    _flutterTts.stop();
   }
 
   @override
@@ -157,8 +160,8 @@ class _QRViewExampleState extends State<QRViewExample> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
-            _flutterTts.stop(); // Interrompe qualquer leitura
-            Navigator.pop(context); // Volta para a tela anterior
+            _flutterTts.stop();
+            Navigator.pop(context);
           },
         ),
       ),
@@ -202,11 +205,11 @@ class _QRViewExampleState extends State<QRViewExample> {
                       onDetect: (barcodeCapture) {
                         if (!isScanCompleted) {
                           final String code = barcodeCapture.barcodes.first.rawValue ?? '';
-                          print('Código escaneado: $code'); // Log para depuração
+                          print('Código escaneado: $code');
                           if (insectData.containsKey(code)) {
                             final insect = insectData[code]!;
                             isScanCompleted = true;
-                            _flutterTts.stop(); // Para o TTS ao navegar para outra tela
+                            _flutterTts.stop();
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -215,8 +218,8 @@ class _QRViewExampleState extends State<QRViewExample> {
                                 ),
                               ),
                             ).then((_) {
-                              closeScreen(); // Reseta a tela após a navegação
-                              _speakInstructions(); // Reproduz as instruções novamente
+                              closeScreen();
+                              _speakInstructions();
                             });
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(

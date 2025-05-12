@@ -10,21 +10,17 @@ class Question {
     required this.correctIndex,
   }) : optionVoiceCommands = _generateOptionCommands(options);
 
-  // Gera variações de comandos de voz para cada opção
   static Map<String, List<String>> _generateOptionCommands(List<String> options) {
     Map<String, List<String>> commands = {};
-    
+
     for (int i = 0; i < options.length; i++) {
       final number = i + 1;
       commands['opção $number'] = [
-        // Variações específicas para o número 1
         if (number == 1) ...[
           'um',
           'hum',
           'primeiro',
           'primeira',
-          'opção um',
-          'opção hum',
           'alternativa um',
           'alternativa hum',
           'número um',
@@ -32,7 +28,38 @@ class Question {
           'primeira opção',
           'primeira alternativa',
         ],
-        // Variações comuns para todos os números
+        if (number == 2) ...[
+          'dois',
+          'duas',
+          'segundo',
+          'segunda',
+          'alternativa dois',
+          'alternativa duas',
+          'número dois',
+          'número duas',
+          'segunda opção',
+          'segunda alternativa',
+        ],
+        if (number == 3) ...[
+          'três',
+          'terceiro',
+          'terceira',
+          'alternativa três',
+          'alternativa terceira',
+          'número três',
+          'terceira opção',
+          'terceira alternativa',
+        ],
+        if (number == 4) ...[
+          'quatro',
+          'quarta',
+          'quarto',
+          'alternativa quatro',
+          'alternativa quarta',
+          'número quatro',
+          'quarta opção',
+          'quarta alternativa',
+        ],
         'opção $number',
         '$number',
         'número $number',
@@ -58,64 +85,70 @@ class Question {
       3: ['três', 'tres', 'terceiro', 'terceira', 'terceira opção', 'terceira opição', 'tercera opção', 'tercera opição'],
       4: ['quatro', 'quarta', 'quarto', 'quarta opção', 'quarta opição'],
     };
-    return words[number]?.first ?? number.toString(); // Retorna apenas a primeira variação
+    return words[number]?.first ?? number.toString();
   }
 
-  // Verifica se um comando de voz corresponde a uma opção
-  int? matchVoiceCommand(String command) {
-    command = command.toLowerCase().trim();
-    print("Verificando comando: $command"); // Debug
+  Map<String, dynamic> matchVoiceCommand(String command) {
+    if (command.isEmpty) {
+      print("Comando vazio recebido");
+      return {'recognized': false, 'value': null};
+    }
 
-    // Tratamento especial para o número "um"
-    if (command == "um" || command == "hum")
-      return 0;
+    command = command.toLowerCase().trim();
+    print("Verificando comando: $command");
+
+    if (command == "um" || command == "hum") {
+      return {'recognized': true, 'value': 0};
+    }
 
     for (var entry in optionVoiceCommands.entries) {
       if (entry.value.any((variant) {
-        // Divide a variante se contiver múltiplas opções (separadas por |)
         final variations = variant.toLowerCase().split('|');
         return variations.any((v) => command.contains(v.trim()));
       })) {
-        return int.parse(entry.key.replaceAll('opção ', '')) - 1;
+        return {
+          'recognized': true,
+          'value': int.parse(entry.key.replaceAll('opção ', '')) - 1
+        };
       }
     }
-    return null;
+
+    return {'recognized': false, 'value': null};
   }
 
-  // Variações adicionais para comandos de navegação
   static final Map<String, List<String>> navigationCommands = {
-    'próximo': [
-      'próximo', 'próxima', 'avançar', 'seguinte', 'continuar',
-      'passar', 'próxima questão', 'próxima pergunta', 'avançar questão',
-      'próximo', 'próxima', 'seguinte', 'avança', 'continua'
+    'próxima pergunta': [
+      'próximo',
+      'próxima',
+      'avançar',
+      'seguinte',
+      'continuar',
+      'passar',
+      'próxima pergunta',
+      'avançar questão'
     ],
-    'anterior': [
-      'anterior', 'voltar', 'retornar', 'volta', 'retorna',
-      'questão anterior', 'pergunta anterior', 'voltar questão',
-      'anterior', 'volta', 'retorna', 'voltando', 'retornando'
-    ],
-    'confirmar': [
-      'confirmar', 'confirma', 'finalizar', 'terminar', 'concluir',
-      'confirmar respostas', 'finalizar quiz', 'terminar quiz',
-      'concluir quiz', 'pronto', 'terminei', 'acabei'
-    ]
+    'voltar pergunta': ['anterior', 'voltar', 'retornar', 'questão anterior', 'pergunta anterior'],
+    'finalizar': ['confirmar', 'finalizar', 'terminar', 'concluir', 'pronto', 'terminei'],
   };
 
-  // Verifica comandos de navegação
-  static String? matchNavigationCommand(String command) {
-    command = command.toLowerCase().trim();
-    
+  static Map<String, dynamic> matchNavigationCommand(String command) {
+    if (command.isEmpty) {
+      print("Comando vazio recebido");
+      return {'recognized': false, 'value': null};
+    }
+
+    final cmd = command.toLowerCase().trim();
     for (var entry in navigationCommands.entries) {
-      if (entry.value.any((variant) => command.contains(variant.toLowerCase()))) {
-        return entry.key;
+      if (entry.value.any((variant) => cmd.contains(variant))) {
+        return {'recognized': true, 'value': entry.key};
       }
     }
-    return null;
+
+    return {'recognized': false, 'value': null};
   }
 }
 
 class Questions {
-  /// Mapa de perguntas categorizadas por nome de inseto.
   static final Map<String, List<Question>> questionsMap = {
     'Escorpião': [
       Question(
@@ -174,7 +207,12 @@ class Questions {
     'Barbeiro': [
       Question(
         question: 'Por que o barbeiro é perigoso?',
-        options: ['Ele pica e transmite a Doença de Chagas', 'Tem veneno mortal', 'Causa alergias severas', 'Se alimenta de plantas tóxicas'],
+        options: [
+          'Ele pica e transmite a Doença de Chagas',
+          'Tem veneno mortal',
+          'Causa alergias severas',
+          'Se alimenta de plantas tóxicas'
+        ],
         correctIndex: 0,
       ),
       Question(

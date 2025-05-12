@@ -15,7 +15,6 @@ class InsectListScreen extends StatefulWidget {
   State<InsectListScreen> createState() => _InsectListScreenState();
 }
 
-//TODO Corrigir a ativação da fala
 class _InsectListScreenState extends State<InsectListScreen> with WidgetsBindingObserver {
   final FlutterTts _flutterTts = FlutterTts();
   final SpeechService _speechService = SpeechService();
@@ -27,89 +26,141 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.delayed(const Duration(milliseconds: 500), ()
-    {
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    try {
+      print("Inicializando InsectListScreen...");
+      await _configureTts();
+      await _checkPermissions();
+      await Future.delayed(const Duration(milliseconds: 300));
       if (mounted) {
-        _configureTts().then((_) {
-          _checkPermissions().then((_) => _initializeSpeech());
-        });
+        await _initializeSpeechService();
+        await _speakInstruction();
+        await _startListeningWithRetry();
       }
-    });
+    } catch (e) {
+      print("Erro na inicialização: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao iniciar: ${e.toString()}")),
+        );
+      }
+    }
+  }
+
+  Future<void> _configureTts() async {
+    try {
+      print("Configurando TTS...");
+      // Verificar idiomas disponíveis
+      List<dynamic> languages = await _flutterTts.getLanguages;
+      print("Idiomas disponíveis: $languages");
+      String targetLanguage = 'pt-BR';
+
+      await _flutterTts.setLanguage(targetLanguage);
+      await _flutterTts.setSpeechRate(0.6);
+      await _flutterTts.setVolume(1.0);
+
+      _flutterTts.setStartHandler(() {
+        print("TTS iniciado");
+        setState(() => _isSpeaking = true);
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted && _isListening) {
+            _speechService.stop().then((_) {
+              print("Reconhecimento parado com sucesso");
+            }).catchError((e) {
+              print("Erro ao parar reconhecimento: $e");
+            });
+          }
+        });
+      });
+
+      _flutterTts.setCompletionHandler(() async {
+        print("TTS completado");
+        setState(() => _isSpeaking = false);
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (mounted && !_isListening && !_isSpeaking) {
+          print("Iniciando reconhecimento pós-TTS");
+          await _startListeningWithRetry();
+        }
+      });
+
+      _flutterTts.setErrorHandler((msg) {
+        print("Erro no TTS: $msg");
+        setState(() => _isSpeaking = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Erro no áudio: $msg")),
+          );
+          _startListeningWithRetry();
+        }
+      });
+
+      print("TTS configurado com sucesso");
+    } catch (e) {
+      print("Erro ao configurar TTS: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao configurar áudio: ${e.toString()}")),
+        );
+      }
+    }
+  }
+
+  Future<void> _initializeSpeechService() async {
+    bool initialized = false;
+    int attempts = 0;
+
+    while (!initialized && attempts < 3 && mounted) {
+      attempts++;
+      print("Tentativa $attempts de inicializar SpeechService...");
+      initialized = await _speechService.initialize(context: context);
+
+      if (!initialized) {
+        print("Tentativa $attempts falhou: ${_speechService.lastError}");
+        await Future.delayed(const Duration(milliseconds: 2000));
+      }
+    }
+
+    if (!initialized && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Não foi possível iniciar o reconhecimento de voz")),
+      );
+      // Continuar com TTS mesmo se SpeechService falhar
+      await _speakInstruction();
+    }
   }
 
   @override
   void dispose() {
+    print("Disposing InsectListScreen...");
     _stopAllAudio();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  Future<void> _configureTts() async {
-    _flutterTts.setStartHandler(() {
-      print("TTS iniciado - desligando reconhecimento");
-      setState(() => _isSpeaking = true);
-      // Delay maior antes de parar o reconhecimento
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (mounted && _isListening) {
-          _speechService.stop().then((_) {
-            print("Reconhecimento parado com sucesso");
-          }).catchError((e) {
-            print("Erro ao parar reconhecimento: $e");
-          });
-        }
-      });
-    });
-
-    _flutterTts.setCompletionHandler(() async {
-      print("TTS completado - preparando para ativar reconhecimento");
-      setState(() => _isSpeaking = false);
-      // Delay maior e verificação de estado
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (mounted && !_isListening && !_isSpeaking) {
-        print("Iniciando reconhecimento pós-TTS");
-        await _startListeningWithRetry();
-      }
-    });
-
-    _flutterTts.setErrorHandler((msg) {
-      print("Erro no TTS: $msg");
-      setState(() => _isSpeaking = false);
-      if (mounted) _startListeningWithRetry();
-    });
-
-    await _flutterTts.setLanguage("pt-BR");
-    await _flutterTts.setSpeechRate(0.6);
-    await _flutterTts.setVolume(1.0);
-  }
-
-  Future<void> _startListeningWithRetry({int attempt = 0}) async {
-    if (attempt >= 3 || !mounted) return;
+  Future<void> _speakInstruction() async {
+    if (_isSpeaking || !mounted) {
+      print("Não pode falar: _isSpeaking=$_isSpeaking, mounted=$mounted");
+      return;
+    }
 
     try {
-      await _startListening();
-      _retryCount = 0; // Resetar contador se bem-sucedido
-    } catch (e) {
-      print("Falha na tentativa ${attempt + 1}: $e");
-      await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
-      if (mounted) {
-        await _startListeningWithRetry(attempt: attempt + 1);
-      }
-    }
-  }
-
-  Future<void> _initializeSpeech() async {
-    if (!mounted) return;
-
-    bool initialized = await _speechService.initialize(context: context);
-    if (initialized) {
-      if (!_isSpeaking) {
-        await _speakInstruction();
-        await _startListeningWithRetry();
-      }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Falha ao inicializar reconhecimento de voz")),
+      print("Falando instrução...");
+      setState(() => _isSpeaking = true);
+      await _flutterTts.speak(
+        "Fale o nome de um inseto para ver mais informações. Diga claramente: Escorpião, Borboleta, Barbeiro, Abelha ou Aranha. "
+            "Diga Voltar para retornar a tela inicial",
       );
+    } catch (e) {
+      print("Erro ao falar instrução: $e");
+      setState(() => _isSpeaking = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao falar instrução: ${e.toString()}")),
+        );
+      }
     }
   }
 
@@ -128,86 +179,74 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _startListening() async {
-    if (_isSpeaking || !mounted) {
-      print("Não iniciar escuta - TTS ativo ou tela não montada");
+  Future<void> _startListeningWithRetry({int attempt = 0}) async {
+    if (attempt >= 3 || !mounted) {
+      print("Máximo de tentativas atingido ou não montado");
       return;
     }
 
     try {
-      print("Preparando ambiente para escuta...");
-
-      // Verificar permissões novamente
-      if (!(await Permission.microphone.isGranted)) {
-        await _checkPermissions();
-        return;
-      }
-
-      // Reinicializar se necessário
-      if (!_speechService.isInitialized) {
-        print("Reinicializando SpeechService...");
-        await _speechService.initialize(context: context);
-      }
-
-      print("Parando qualquer escuta anterior...");
-      await _speechService.stop();
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      print("Iniciando nova sessão de escuta...");
-      await _speechService.listen(
-        onResult: (command) {
-          if (command
-              .trim()
-              .isNotEmpty) {
-            print("Comando recebido: $command");
-            _handleVoiceCommand(command);
-          }
-        },
-        localeId: 'pt_BR',
-        listenFor: const Duration(seconds: 15),
-        // Tempo aumentado
-        pauseFor: const Duration(seconds: 5),
-        // Pausa aumentada
-        onSoundLevelChange: (level) {
-          if (level > 0) print("Nível de som detectado: $level dB");
-        },
-      );
-
-      setState(() => _isListening = true);
-      print("Escuta ativada com sucesso");
+      await _startListening();
+      _retryCount = 0;
     } catch (e) {
-      print("Falha crítica ao iniciar escuta: $e");
-      if (mounted) setState(() => _isListening = false);
-      await _handleListeningError(e);
+      print("Falha na tentativa ${attempt + 1}: $e");
+      await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+      if (mounted) {
+        await _startListeningWithRetry(attempt: attempt + 1);
+      }
     }
   }
 
-  Future<void> _handleListeningError(dynamic error) async {
-    print("Tratando erro: ${error.toString()}");
+  Future<void> _startListening() async {
+    if (!mounted || _isSpeaking || _isListening) {
+      print("Não pode iniciar escuta: mounted=$mounted, _isSpeaking=$_isSpeaking, _isListening=$_isListening");
+      return;
+    }
 
-    if (error.toString().contains('error_no_match')) {
-      if (_retryCount < 2) {
-        _retryCount++;
-        print("Tentativa $_retryCount - Nenhum comando reconhecido");
-        await Future.delayed(const Duration(seconds: 1));
-        if (mounted && !_isSpeaking) {
-          await _startListening();
-        }
-      } else {
-        print("Máximo de tentativas alcançado");
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Não consegui te ouvir. Tente novamente mais tarde.")),
-          );
-        }
-        _retryCount = 0;
-      }
-    } else {
-      print("Erro não tratado: $error");
+    try {
+      print("Iniciando escuta...");
+      setState(() => _isListening = true);
+
+      await _speechService.listen(
+        onResult: (command) {
+          print("Resultado recebido: '$command'");
+          if (command.trim().isNotEmpty) {
+            _handleVoiceCommand(command);
+          } else {
+            print("Comando vazio recebido, reiniciando escuta");
+            _flutterTts.speak("Nenhum comando detectado. Diga o nome de um inseto ou voltar.").then((_) {
+              if (mounted && !_isSpeaking) {
+                _startListening();
+              }
+            });
+            _vibrate();
+          }
+        },
+        localeId: 'pt_BR',
+        listenFor: const Duration(minutes: 5),
+        pauseFor: const Duration(seconds: 10),
+        onSoundLevelChange: (level) {
+          if (level > 0) print("Nível de som: $level");
+        },
+      );
+
+      print("Escuta ativada com sucesso");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erro no microfone: ${error.toString()}")),
+          const SnackBar(content: Text("Microfone ativo. Fale seu comando.")),
         );
+      }
+    } catch (e) {
+      print("Erro ao iniciar escuta: $e");
+      setState(() => _isListening = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro no microfone: ${e.toString()}")),
+        );
+        await Future.delayed(const Duration(seconds: 1));
+        if (!_isSpeaking) {
+          _startListening();
+        }
       }
     }
   }
@@ -220,66 +259,51 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _speakInstruction() async {
-    try {
-      await _flutterTts.speak(
-        "Fale o nome de um inseto para ver mais informações. Diga claramente: Escorpião, Borboleta, Barbeiro, Abelha ou Aranha. "
-            "Diga Voltar para retornar a tela inicial",
-      );
-    } catch (e) {
-      print("Erro no TTS: $e");
-      if (mounted) setState(() => _isSpeaking = false);
-    }
-  }
-
-  void _vibrate({bool isNavigation = false}) async {
+  void _vibrate({int duration = 100}) async {
     if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: isNavigation ? 300 : 200);
+      Vibration.vibrate(duration: duration);
     }
   }
 
   Future<void> _handleVoiceCommand(String command) async {
-    if (_isSpeaking || !mounted) return;
+    if (!mounted) return;
 
-    final lowerCaseCommand = command.toLowerCase().trim();
-    print("Processando comando: $lowerCaseCommand");
-
-    await _stopAllAudio();
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    if (_matchesCommand(lowerCaseCommand, 'voltar')) {
-      await _executeCommand('Voltar', _navigateBackToHome);
-      return;
+    if (_isSpeaking) {
+      print("Interrompendo TTS para processar comando...");
+      await _flutterTts.stop(); // ou o nome do seu serviço TTS
+      _isSpeaking = false;
     }
 
-    final insectUrl = insectData.keys.firstWhere(
-          (url) => _matchesCommand(lowerCaseCommand, insectData[url]?.name.toLowerCase() ?? ''),
-      orElse: () => '',
-    );
+    print("Processando comando: '$command'");
+    await _speechService.stop();
+    setState(() => _isListening = false);
 
-    if (insectUrl.isNotEmpty) {
-      final insect = insectData[insectUrl];
-      await _executeCommand(insect!.name, () => _navigateToInsectDetail(insectUrl));
-    } else {
-      await _handleUnrecognizedCommand();
-    }
-  }
+    try {
+      final lowerCaseCommand = command.toLowerCase().trim();
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.resumed:
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted && !_isSpeaking) {
-            _initializeSpeech();
-          }
-        });
-        break;
-      case AppLifecycleState.paused:
-        _stopAllAudio();
-        break;
-      default:
-        break;
+      if (_matchesCommand(lowerCaseCommand, 'voltar')) {
+        await _executeCommand('Voltar', _navigateBackToHome);
+        return;
+      }
+
+      final insectUrl = insectData.keys.firstWhere(
+            (url) => _matchesCommand(lowerCaseCommand, insectData[url]?.name.toLowerCase() ?? ''),
+        orElse: () => '',
+      );
+
+      if (insectUrl.isNotEmpty) {
+        final insect = insectData[insectUrl];
+        await _executeCommand(insect!.name, () => _navigateToInsectDetail(insectUrl));
+      } else {
+        await _handleUnrecognizedCommand();
+      }
+    } catch (e) {
+      print("Erro ao processar comando: $e");
+    } finally {
+      if (mounted && !_isSpeaking && !_isListening) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _startListening();
+      }
     }
   }
 
@@ -384,7 +408,6 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
       },
     };
 
-    // Função para normalizar texto (remover acentos, espaços e deixar em minúsculo)
     String normalize(String text) {
       return removeDiacritics(text).toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
     }
@@ -399,9 +422,9 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
   }
 
   Future<void> _executeCommand(String command, Function() action) async {
-    await _flutterTts.speak("Executando $command");
-    _vibrate(isNavigation: true);
-    await Future.delayed(const Duration(milliseconds: 1000));
+    _vibrate();
+    await _flutterTts.speak(command);
+    await Future.delayed(const Duration(milliseconds: 800));
     action();
   }
 
@@ -432,13 +455,15 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
     );
   }
 
-  void _handleNavigationReturn() {
+  Future<void> _handleNavigationReturn() async {
     if (mounted) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          _initializeSpeech();
-        }
-      });
+      print("Retornando de navegação, reinicializando áudio...");
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) {
+        await _configureTts();
+        await _speakInstruction();
+        await _startListeningWithRetry();
+      }
     }
   }
 
@@ -450,12 +475,32 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
         _isListening = false;
         _isSpeaking = false;
       });
+      print("All audio stopped successfully");
     } catch (e) {
       print("Erro ao parar áudio: $e");
       setState(() {
         _isListening = false;
         _isSpeaking = false;
       });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print("Ciclo de vida alterado: $state");
+    switch (state) {
+      case AppLifecycleState.resumed:
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && !_isSpeaking) {
+            _initializeApp();
+          }
+        });
+        break;
+      case AppLifecycleState.paused:
+        _stopAllAudio();
+        break;
+      default:
+        break;
     }
   }
 
@@ -517,7 +562,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
                     onTap: () {
-                      _vibrate(isNavigation: true);
+                      _vibrate();
                       _flutterTts.stop();
                       Navigator.push(
                         context,
@@ -526,7 +571,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
                         ),
                       ).then((_) {
                         if (mounted) {
-                          _initializeSpeech();
+                          _handleNavigationReturn();
                         }
                       });
                     },
