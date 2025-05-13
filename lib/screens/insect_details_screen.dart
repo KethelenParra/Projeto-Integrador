@@ -352,8 +352,7 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     final fullMessage = "Detalhando ${widget.insect.name}. " +
         "Diga 'perguntas' para iniciar o questionário, " +
         "'reproduzir vídeo' para controlar o vídeo, " +
-        "'lista' para retornar. " +
-        "${widget.insect.description}";
+        "'lista' para retornar. ";
 
     await _flutterTts.awaitSpeakCompletion(true);
     await _flutterTts.speak(fullMessage);
