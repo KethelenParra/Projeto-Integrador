@@ -102,7 +102,7 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     // Comandos gerais: sair do quiz
-    if (cmd.contains('voltar tela') ||
+    if (cmd.contains('detalhes') ||
         cmd.contains('sair quiz') ||
         cmd == 'sair') {
       _vibrate();
@@ -204,7 +204,7 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     ttsMessage +=
-        " Para sair do quiz e voltar aos detalhes do inseto, diga “voltar tela”.";
+        " Para sair do quiz e voltar aos detalhes do inseto, diga “detalhes”.";
 
     await _flutterTts.speak(ttsMessage);
   }
@@ -571,4 +571,3 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 }
-

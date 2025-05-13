@@ -129,7 +129,7 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     setState(() => _isListening = false);
 
     try {
-      if (_matchesCommand(lowerCommand, 'voltar')) {
+      if (_matchesCommand(lowerCommand, 'lista')) {
         _videoController.pause();
         await _executeCommand(
             'Retornando para a lista de insetos', _navigateToListView);
@@ -163,7 +163,7 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       }
 
       await _flutterTts.speak(
-          "Comando não reconhecido. Tente dizer 'reproduzir video', 'parar vídeo', 'perguntas' ou 'voltar'.");
+          "Comando não reconhecido. Tente dizer 'reproduzir video', 'parar vídeo', 'perguntas' ou 'lista'.");
     } catch (e) {
       print("Erro no comando: $e");
     } finally {
@@ -193,14 +193,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     }
   }
 
-  void _navigateToScreen(Widget screen) async {
+  Future<void> _navigateToScreen(Widget screen) async {
     await _stopAllAudio();
-    if (!mounted) {
-      print("Não pode navegar: widget não montado");
-      return;
-    }
-    await Navigator.push(
-        context, MaterialPageRoute(builder: (context) => screen));
+    if (!mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 100));
+    await _speakWelcomeMessage();
+    await _safeStartListening();
   }
 
   void _navigateToQuizView() {
@@ -279,7 +279,7 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     // Mensagem após término do vídeo
     await _flutterTts.speak(
         "O que deseja fazer? Diga 'perguntas' para responder o questionário, "
-        "'reproduzir video' para ouvir o vídeo, 'voltar tela' para voltar para a tela inicial.");
+        "'reproduzir video' para ouvir o vídeo, 'lista' para voltar para a lista de inseto.");
   }
 
   Future<void> _startQuiz() async {
@@ -302,16 +302,12 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
 
   bool _matchesCommand(String input, String command) {
     final variations = {
-      'voltar': [
-        'voltar',
-        'volta',
+      'lista': [
         'retornar',
         'retorna',
-        'voltar para trás',
-        'vai voltar',
         'ir para trás',
-        'voltar menu',
-        'voltar início',
+        'lista',
+        'lista de insetos',
       ],
       'perguntas': [
         'questionário',
@@ -353,10 +349,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
   }
 
   Future<void> _speakWelcomeMessage() async {
-    String message = "Detalhando ${widget.insect.name}. "
-        "Diga 'perguntas' para iniciar o questionário, 'reproduzir video' para controlar o vídeo, ou 'voltar' para retornar.";
+    final fullMessage = "Detalhando ${widget.insect.name}. " +
+        "Diga 'perguntas' para iniciar o questionário, " +
+        "'reproduzir vídeo' para controlar o vídeo, " +
+        "'lista' para retornar. " +
+        "${widget.insect.description}";
+
     await _flutterTts.awaitSpeakCompletion(true);
-    await _flutterTts.speak(message);
+    await _flutterTts.speak(fullMessage);
   }
 
   Future<void> _safeStartListening(
@@ -692,21 +692,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
             Center(
               child: ElevatedButton(
                 onPressed: () {
-                  _vibrate(); // Vibração ao clicar no botão "Fazer Quiz"
-                  if (_videoController.value.isPlaying) {
+                  _vibrate();
+                  if (_videoController.value.isPlaying)
                     _videoController.pause();
-                  }
                   _videoController.seekTo(Duration.zero);
-                  setState(() {
-                    _currentScrollPosition = 0;
-                  });
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          QuizScreen(insectName: widget.insect.name),
-                    ),
-                  );
+                  setState(() => _currentScrollPosition = 0);
+
+                  // Substitui o Navigator.push direto:
+                  _navigateToScreen(QuizScreen(insectName: widget.insect.name));
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEAB08A),
