@@ -75,7 +75,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     }
 
     if (!initialized && mounted) {
-      throw Exception("Não foi possível inicializar o serviço de voz após 3 tentativas");
+      throw Exception(
+          "Não foi possível inicializar o serviço de voz após 3 tentativas");
     }
   }
 
@@ -94,7 +95,9 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     _flutterTts.setCompletionHandler(() async {
       setState(() => _isSpeaking = false);
 
-      if (_shouldStartQuizAfterVideo && !_isProcessingVideoCommand && !_videoController.value.isPlaying) {
+      if (_shouldStartQuizAfterVideo &&
+          !_isProcessingVideoCommand &&
+          !_videoController.value.isPlaying) {
         print("Iniciando quiz após vídeo");
         _navigateToQuizView();
         _shouldStartQuizAfterVideo = false;
@@ -128,7 +131,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     try {
       if (_matchesCommand(lowerCommand, 'voltar')) {
         _videoController.pause();
-        await _executeCommand('Retornando para a lista de insetos', _navigateToListView);
+        await _executeCommand(
+            'Retornando para a lista de insetos', _navigateToListView);
         return;
       }
 
@@ -138,7 +142,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         return;
       }
 
-      if (_matchesCommand(lowerCommand, 'parar') && _videoController.value.isPlaying) {
+      if (_matchesCommand(lowerCommand, 'parar') &&
+          _videoController.value.isPlaying) {
         await _executeCommand("Parando vídeo", () {
           _videoController.pause();
           _isProcessingVideoCommand = false;
@@ -149,7 +154,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       if (_matchesCommand(lowerCommand, 'perguntas')) {
         if (_isProcessingVideoCommand || _videoController.value.isPlaying) {
           setState(() => _shouldStartQuizAfterVideo = true);
-          await _flutterTts.speak("Quando terminar o vídeo, iniciaremos o quiz");
+          await _flutterTts
+              .speak("Quando terminar o vídeo, iniciaremos o quiz");
         } else {
           await _executeCommand('Navegando para o quiz', _navigateToQuizView);
         }
@@ -157,11 +163,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       }
 
       await _flutterTts.speak(
-          "Comando não reconhecido. Tente dizer 'reproduzir vídeo', 'parar vídeo', 'perguntas' ou 'voltar'.");
+          "Comando não reconhecido. Tente dizer 'reproduzir video', 'parar vídeo', 'perguntas' ou 'voltar'.");
     } catch (e) {
       print("Erro no comando: $e");
     } finally {
-      if (!_isVideoCommandActive && mounted && !_isSpeaking && !_videoController.value.isPlaying) {
+      if (!_isVideoCommandActive &&
+          mounted &&
+          !_isSpeaking &&
+          !_videoController.value.isPlaying) {
         await _restartListening();
       }
     }
@@ -190,7 +199,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       print("Não pode navegar: widget não montado");
       return;
     }
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (context) => screen));
   }
 
   void _navigateToQuizView() {
@@ -236,12 +246,18 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
 
       // Listener para detectar término do vídeo
       _videoController.addListener(() {
-        if (!_videoController.value.isPlaying && _videoController.value.position >= _videoController.value.duration) {
+        if (!_videoController.value.isPlaying &&
+            _videoController.value.position >=
+                _videoController.value.duration) {
           print("Vídeo terminou");
           setState(() => _isProcessingVideoCommand = false);
           if (_shouldStartQuizAfterVideo && mounted) {
             _navigateToQuizView();
             _shouldStartQuizAfterVideo = false;
+          }
+          // Anunciar opções após o vídeo
+          if (mounted) {
+            _announcePostVideoOptions();
           }
           // Reativar escuta após o vídeo terminar
           if (mounted && !_isSpeaking) {
@@ -255,6 +271,15 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         await _restartListening(delayMs: 1200);
       }
     }
+  }
+
+  Future<void> _announcePostVideoOptions() async {
+    // Aguarda qualquer fala em andamento terminar antes de anunciar as opções
+    await _flutterTts.awaitSpeakCompletion(true);
+    // Mensagem após término do vídeo
+    await _flutterTts.speak(
+        "O que deseja fazer? Diga 'perguntas' para responder o questionário, "
+        "'reproduzir video' para ouvir o vídeo, 'voltar tela' para voltar para a tela inicial.");
   }
 
   Future<void> _startQuiz() async {
@@ -322,7 +347,9 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       ],
     };
 
-    return variations[command]?.any((variant) => input.toLowerCase().contains(variant)) ?? false;
+    return variations[command]
+            ?.any((variant) => input.toLowerCase().contains(variant)) ??
+        false;
   }
 
   Future<void> _speakWelcomeMessage() async {
@@ -332,7 +359,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     await _flutterTts.speak(message);
   }
 
-  Future<void> _safeStartListening({Duration listenFor = const Duration(minutes: 10)}) async {
+  Future<void> _safeStartListening(
+      {Duration listenFor = const Duration(minutes: 10)}) async {
     try {
       await _startListening(listenFor: listenFor); // Removido o timeout
     } catch (e) {
@@ -340,9 +368,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     }
   }
 
-  Future<void> _startListening({Duration listenFor = const Duration(minutes: 10)}) async {
-    if (!mounted || _isSpeaking || _isListening || _videoController.value.isPlaying) {
-      print("Não pode iniciar escuta: montado=$mounted, falando=$_isSpeaking, escutando=$_isListening, vídeo rodando=${_videoController.value.isPlaying}");
+  Future<void> _startListening(
+      {Duration listenFor = const Duration(minutes: 10)}) async {
+    if (!mounted ||
+        _isSpeaking ||
+        _isListening ||
+        _videoController.value.isPlaying) {
+      print(
+          "Não pode iniciar escuta: montado=$mounted, falando=$_isSpeaking, escutando=$_isListening, vídeo rodando=${_videoController.value.isPlaying}");
       return;
     }
 
@@ -385,12 +418,15 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
           await _restartListening(delayMs: 500);
         }
       }
-    } else if (error.toString().contains('error_audio') || error.toString().contains('Error 7')) {
-      print("🎤 Erro no áudio (Error 7) - verificando permissões e reinicializando");
+    } else if (error.toString().contains('error_audio') ||
+        error.toString().contains('Error 7')) {
+      print(
+          "🎤 Erro no áudio (Error 7) - verificando permissões e reinicializando");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Problema no microfone. Verifique as permissões ou tente novamente."),
+            content: Text(
+                "Problema no microfone. Verifique as permissões ou tente novamente."),
             action: SnackBarAction(
               label: 'Configurações',
               onPressed: openAppSettings,
@@ -407,7 +443,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
           await _restartListening(delayMs: 1000);
         }
       }
-    } else if (error.toString().contains('error_client') || error.toString().contains('error_busy')) {
+    } else if (error.toString().contains('error_client') ||
+        error.toString().contains('error_busy')) {
       print("🔄 Erro no cliente - reinicializando serviços");
       if (mounted) {
         await _initializeServices();
@@ -416,7 +453,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       print("⚠️ Erro não tratado - tentando recuperação");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Problema temporário no reconhecimento de voz")),
+          const SnackBar(
+              content: Text("Problema temporário no reconhecimento de voz")),
         );
         await Future.delayed(const Duration(seconds: 2));
         if (mounted && !_isSpeaking && !_videoController.value.isPlaying) {
@@ -455,9 +493,12 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     });
   }
 
-  Future<void> _restartListening({int delayMs = 2000, Duration listenFor = const Duration(minutes: 10)}) async {
+  Future<void> _restartListening(
+      {int delayMs = 2000,
+      Duration listenFor = const Duration(minutes: 10)}) async {
     if (!mounted || _isSpeaking || _videoController.value.isPlaying) {
-      print("Não pode reiniciar escuta: montado=$mounted, falando=$_isSpeaking, vídeo rodando=${_videoController.value.isPlaying}");
+      print(
+          "Não pode reiniciar escuta: montado=$mounted, falando=$_isSpeaking, vídeo rodando=${_videoController.value.isPlaying}");
       return;
     }
 
@@ -475,7 +516,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
       await Future.delayed(Duration(milliseconds: delayMs));
 
       if (mounted && !_isSpeaking && !_videoController.value.isPlaying) {
-        print("Iniciando nova tentativa de escuta com listenFor=${listenFor.inSeconds}s...");
+        print(
+            "Iniciando nova tentativa de escuta com listenFor=${listenFor.inSeconds}s...");
         await _safeStartListening(listenFor: listenFor);
       }
     } catch (e) {
@@ -485,7 +527,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
           const SnackBar(content: Text("Problema ao ativar microfone")),
         );
 
-        await Future.delayed(const Duration(seconds: 2)); // Aumentado para 2 segundos
+        await Future.delayed(
+            const Duration(seconds: 2)); // Aumentado para 2 segundos
         if (mounted && !_videoController.value.isPlaying) {
           _restartListening(delayMs: 1000, listenFor: listenFor);
         }
@@ -495,8 +538,9 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
 
   Future<void> _executeCommand(String command, Function() action) async {
     _vibrate();
+    // Faz o speak() só completar quando acabar de falar
+    await _flutterTts.awaitSpeakCompletion(true);
     await _flutterTts.speak(command);
-    await Future.delayed(const Duration(milliseconds: 800));
     action();
   }
 
@@ -540,7 +584,8 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          icon:
+              const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
             _vibrate(); // Vibração ao clicar no botão de voltar
             _videoController.pause(); // Pausa o vídeo ao voltar
@@ -658,13 +703,15 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => QuizScreen(insectName: widget.insect.name),
+                      builder: (context) =>
+                          QuizScreen(insectName: widget.insect.name),
                     ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEAB08A),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
                 child: const Text(
                   'Fazer Quiz',
