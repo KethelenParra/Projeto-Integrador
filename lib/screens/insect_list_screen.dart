@@ -35,10 +35,19 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
       await _configureTts();
       await _checkPermissions();
       await Future.delayed(const Duration(milliseconds: 300));
+
       if (mounted) {
         await _initializeSpeechService();
+
         await _speakInstruction();
-        await _startListeningWithRetry();
+
+        if (mounted) {
+          await _flutterTts.awaitSpeakCompletion(true);
+
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          await _startListeningWithRetry();
+        }
       }
     } catch (e) {
       print("Erro na inicialização: $e");
@@ -151,7 +160,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
       setState(() => _isSpeaking = true);
       await _flutterTts.speak(
         "Fale o nome de um inseto para ver mais informações. Diga claramente: Escorpião, Borboleta, Barbeiro, Abelha ou Aranha. "
-            "Diga Voltar para retornar a tela inicial",
+        "Diga Voltar para retornar a tela inicial",
       );
     } catch (e) {
       print("Erro ao falar instrução: $e");
@@ -287,7 +296,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
       }
 
       final insectUrl = insectData.keys.firstWhere(
-            (url) => _matchesCommand(lowerCaseCommand, insectData[url]?.name.toLowerCase() ?? ''),
+        (url) => _matchesCommand(lowerCaseCommand, insectData[url]?.name.toLowerCase() ?? ''),
         orElse: () => '',
       );
 

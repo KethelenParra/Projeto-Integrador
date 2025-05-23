@@ -89,30 +89,20 @@ class Question {
   }
 
   Map<String, dynamic> matchVoiceCommand(String command) {
-    if (command.isEmpty) {
-      print("Comando vazio recebido");
-      return {'recognized': false, 'value': null};
-    }
+    final cmd = command.toLowerCase().trim();
+    // Mapeia comandos como "primeira opção", "terceira opção", etc.
+    final optionPatterns = [
+      {'pattern': r'primeira\s*(opção)?|opção\s*1|1', 'value': 0},
+      {'pattern': r'segunda\s*(opção)?|opção\s*2|2', 'value': 1},
+      {'pattern': r'terceira\s*(opção)?|opção\s*3|3', 'value': 2},
+      {'pattern': r'quarta\s*(opção)?|opção\s*4|4', 'value': 3},
+    ];
 
-    command = command.toLowerCase().trim();
-    print("Verificando comando: $command");
-
-    if (command == "um" || command == "hum") {
-      return {'recognized': true, 'value': 0};
-    }
-
-    for (var entry in optionVoiceCommands.entries) {
-      if (entry.value.any((variant) {
-        final variations = variant.toLowerCase().split('|');
-        return variations.any((v) => command.contains(v.trim()));
-      })) {
-        return {
-          'recognized': true,
-          'value': int.parse(entry.key.replaceAll('opção ', '')) - 1
-        };
+    for (var pattern in optionPatterns) {
+      if (RegExp(pattern['pattern'] as String).hasMatch(cmd)) {
+        return {'recognized': true, 'value': pattern['value']};
       }
     }
-
     return {'recognized': false, 'value': null};
   }
 
@@ -132,18 +122,17 @@ class Question {
   };
 
   static Map<String, dynamic> matchNavigationCommand(String command) {
-    if (command.isEmpty) {
-      print("Comando vazio recebido");
-      return {'recognized': false, 'value': null};
-    }
-
     final cmd = command.toLowerCase().trim();
-    for (var entry in navigationCommands.entries) {
-      if (entry.value.any((variant) => cmd.contains(variant))) {
-        return {'recognized': true, 'value': entry.key};
-      }
+    if (cmd.contains('voltar pergunta') || cmd == 'voltar') {
+      return {'recognized': true, 'value': 'voltar pergunta'};
     }
-
+    if (cmd.contains('próxima pergunta') || cmd.contains('próxima') || cmd == 'avançar') {
+      return {'recognized': true, 'value': 'próxima pergunta'};
+    }
+    if (cmd.contains('finalizar') || cmd.contains('terminar')) {
+      return {'recognized': true, 'value': 'finalizar'};
+    }
+    // Não reconhecer comandos como "primeira pergunta", "terceira pergunta", etc.
     return {'recognized': false, 'value': null};
   }
 }

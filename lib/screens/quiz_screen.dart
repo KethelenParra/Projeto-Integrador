@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'questions.dart';
 import 'package:vision_app_3d/service/speechService.dart';
-import 'package:vibration/vibration.dart';
+import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class QuizScreen extends StatefulWidget {
   final String insectName;
@@ -18,34 +18,28 @@ class _QuizScreenState extends State<QuizScreen> {
   int _currentQuestionIndex = 0;
   int? _selectedAnswer;
   bool _isAnswered = false;
-  late List<int?> _answers;
-
+  List<int?> _answers = List.filled(5, null);
   final SpeechService _speechService = SpeechService();
   bool _isListening = false;
-  late FlutterTts _flutterTts;
 
-  late PageController _resultPageController;
-  bool _inResultMode = false;
+  late FlutterTts _flutterTts;
 
   @override
   void initState() {
     super.initState();
     _flutterTts = FlutterTts();
-    _answers = List<int?>.filled(
-      Questions.questionsMap[widget.insectName]!.length,
-      null,
-    );
-    _resultPageController = PageController();
     _configureTts();
-    _initializeSpeech();
-    Future.delayed(const Duration(milliseconds: 500), _speakCurrentQuestion);
+    _initializeSpeech(); // Adicione esta linha
+    // Aguarda um pequeno delay para garantir que o TTS esteja pronto
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _speakCurrentQuestion();
+    });
   }
 
   @override
   void dispose() {
     _flutterTts.stop();
     _speechService.stop();
-    _resultPageController.dispose();
     super.dispose();
   }
 
@@ -55,149 +49,73 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Future<void> _startListening() async {
-    if (_isListening) {
-      print("Já está escutando, parando antes de reiniciar...");
-      await _speechService.stop();
-      setState(() => _isListening = false);
-    }
-    if (!_speechService.isInitialized) {
-      print("SpeechService não inicializado, inicializando...");
-      await _speechService.initialize(context: context);
-    }
-    try {
-      await _speechService.listen(
-        onResult: (command) => _handleVoiceCommand(command),
-        localeId: 'pt_BR',
-        listenFor: const Duration(seconds: 120),
-        pauseFor: const Duration(seconds: 5),
-        onSoundLevelChange: (level) {
-          if (level > 0) print("Nível de som: $level");
-        },
-      );
-      setState(() => _isListening = true);
-      print("Reconhecimento de voz iniciado");
-    } catch (e) {
-      print("Erro ao iniciar escuta: $e");
-      setState(() => _isListening = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Problema ao ativar microfone")),
-      );
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted && !_inResultMode) {
-        if (e.toString().contains('Error 7')) {
-          print("Erro 7 detectado, reiniciando SpeechService...");
-          await _speechService.reset();
-          await _speechService.initialize(context: context);
+    if (_isListening) return;
+
+    await _speechService.listen(
+      onResult: (command) {
+        if (command.trim().isNotEmpty) {
+          _handleVoiceCommand(command);
         }
-        _startListening();
-      }
-    }
+      },
+      localeId: 'pt_BR',
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 3), onSoundLevelChange: (level) {  },
+    );
+
+    setState(() => _isListening = true);
   }
 
-  void _handleVoiceCommand(String command) async {
-    final cmd = command.toLowerCase().trim();
+  void _handleVoiceCommand(String command) {
+    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
 
-    if (_inResultMode) {
-      if (cmd.contains('voltar pergunta') || cmd.contains('voltar correção')) {
-        _vibrate();
-        await _flutterTts.stop();
-        if (_resultPageController.page! > 0) {
-          _resultPageController.previousPage(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      } else if (cmd.contains('próxima pergunta') ||
-          cmd.contains('próxima correção')) {
-        _vibrate();
-        await _flutterTts.stop();
-        final total = Questions.questionsMap[widget.insectName]!.length;
-        if (_resultPageController.page! < total - 1) {
-          _resultPageController.nextPage(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      } else if (cmd.contains('fechar correção')) {
-        _vibrate();
-        await _flutterTts.stop();
-        Navigator.pop(context);
-        _inResultMode = false;
-        await _startListening();
-      } else {
-        print("Comando não reconhecido no modo de resultados: $cmd");
-        await _flutterTts.stop();
-        await _flutterTts.speak(
-            "Comando não reconhecido. Diga 'voltar correção', 'próxima correção' ou 'fechar correção'.");
-        _vibrate(duration: 100);
-        // Escuta será reativada pelo setCompletionHandler do TTS
-      }
-      return;
-    }
-
-    // Comandos gerais: sair do quiz
-    if (cmd.contains('voltar tela') ||
-        cmd.contains('sair quiz') ||
-        cmd == 'sair') {
-      _vibrate();
-      await _speechService.stop();
-      await _flutterTts.stop();
-      Navigator.pop(context);
-      Future.delayed(const Duration(milliseconds: 300), () async {
-        await _flutterTts.speak(
-            "Você voltou para a tela de detalhes. Diga 'Iniciar quiz', 'Ler descrição' ou 'Voltar'.");
-        await _startListening();
-      });
-      return;
-    }
-
-    // Seleção de opção
-    final currentQuestion =
-    Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    // Tenta encontrar uma opção correspondente
     final optionMatch = currentQuestion.matchVoiceCommand(command);
     if (optionMatch['recognized'] == true) {
+      final int selectedOption = optionMatch['value'] as int;
+
       setState(() {
-        _selectedAnswer = optionMatch['value'] as int;
+        _selectedAnswer = selectedOption;
         _isAnswered = true;
       });
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (_currentQuestionIndex ==
-            Questions.questionsMap[widget.insectName]!.length - 1) {
-          _showResultDialog();
-        } else {
-          _nextQuestion();
+
+      _answers[_currentQuestionIndex] = selectedOption;
+
+      _vibrate();
+
+      _flutterTts.speak("Opção ${selectedOption + 1} selecionada");
+
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted){
+          if (_currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1){
+            _showResultDialog();
+          } else {
+            _nextQuestion();
+          }
         }
       });
+
       return;
     }
 
-    // Navegação por pergunta
-    final navMatch = Question.matchNavigationCommand(command);
-    if (navMatch['recognized'] == true) {
-      switch (navMatch['value'] as String) {
-        case 'voltar pergunta':
-          print("Comando 'voltar pergunta' reconhecido. Índice atual: $_currentQuestionIndex");
-          _previousQuestion();
-          break;
-        case 'próxima pergunta':
+
+    // Verifica comandos de navegação
+    final navigationCommand = Question.matchNavigationCommand(command);
+    if (navigationCommand != null) {
+      switch (navigationCommand) {
+        case 'próximo':
           if (_isAnswered) _nextQuestion();
           break;
-        case 'finalizar':
+        case 'anterior':
+          _previousQuestion();
+          break;
+        case 'confirmar':
           if (_isAnswered) _showResultDialog();
           break;
       }
-      return;
     }
-
-    // Caso padrão: comando não reconhecido ou vazio
-    print("Comando não reconhecido ou vazio: $cmd, estado _isListening: $_isListening");
-    await _flutterTts.stop();
-    await _flutterTts.speak(
-        "Comando não reconhecido. Diga o número da opção, 'próxima pergunta', 'voltar pergunta' ou 'sair'.");
-    _vibrate(duration: 100);
-    // Escuta será reativada pelo setCompletionHandler do TTS
   }
 
+  // Configura o TTS
   void _configureTts() async {
     await _flutterTts.setLanguage("pt-BR");
     await _flutterTts.setSpeechRate(0.6);
@@ -205,62 +123,48 @@ class _QuizScreenState extends State<QuizScreen> {
     _flutterTts.setStartHandler(() {
       setState(() => _isListening = false);
       _speechService.stop();
-      print("TTS iniciado, escuta parada");
     });
 
     _flutterTts.setCompletionHandler(() async {
-      print("TTS concluído, tentando reativar escuta...");
+      print("TTS completed");
       setState(() => _isListening = false);
       await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted && !_inResultMode) {
-        await _startListening();
+      if (mounted) {
+        _startListening();
       }
     });
 
     _flutterTts.setErrorHandler((msg) async {
       print("Erro TTS: $msg");
       setState(() => _isListening = false);
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted && !_inResultMode) {
-        await _startListening();
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        _startListening();
       }
     });
   }
 
+  // Faz o TTS ler a pergunta atual e as opções
   Future<void> _speakCurrentQuestion() async {
-    final questions = Questions.questionsMap[widget.insectName]!;
-    final total = questions.length;
-    final idx = _currentQuestionIndex;
-    final question = questions[idx];
-
-    print("Lendo pergunta: índice $idx, pergunta: ${question.question}");
-    String ttsMessage = "Pergunta ${idx + 1} de $total: ${question.question}. ";
-    for (int i = 0; i < question.options.length; i++) {
-      ttsMessage += "Opção ${i + 1}: ${question.options[i]}. ";
+    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    String questionText = currentQuestion.question;
+    List<String> options = currentQuestion.options;
+    String ttsMessage = "Pergunta ${_currentQuestionIndex + 1}: $questionText. ";
+    for (int i = 0; i < options.length; i++) {
+      ttsMessage += "Opção ${i + 1}: ${options[i]}. ";
     }
     ttsMessage += "Fale a opção desejada.";
-
-    if (idx > 0) {
-      ttsMessage += " Para voltar à pergunta anterior, diga 'voltar pergunta'.";
-    }
-
-    if (_isAnswered && idx < total - 1) {
-      ttsMessage +=
-      " Quando quiser ir para a próxima pergunta, diga 'próxima pergunta'.";
-    }
-
-    ttsMessage +=
-    " Para sair do quiz e voltar aos detalhes do inseto, diga 'voltar tela'.";
-
     await _flutterTts.speak(ttsMessage);
   }
 
-  void _vibrate({int duration = 200}) async {
+  // Função para acionar a vibração personalizada
+  void _vibrate() async {
     if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: duration);
+      Vibration.vibrate(duration: 200); // vibração de 200ms
     }
   }
 
+  /// Método para ler os resultados de cada página do diálogo.
   Future<void> _speakResultPage(int index) async {
     final question = Questions.questionsMap[widget.insectName]![index];
     final userAnswer = _answers[index];
@@ -268,78 +172,75 @@ class _QuizScreenState extends State<QuizScreen> {
     String resultText = "Pergunta ${index + 1}: ${question.question}. ";
     resultText += "Sua resposta: ${question.options[userAnswer ?? 0]}. ";
     if (userAnswer == correctAnswer) {
-      resultText +=
-      "Sua resposta está correta. Diga 'voltar correção', 'próxima correção' ou 'fechar correção'.";
+      resultText += "Sua resposta está correta. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
     } else {
       resultText +=
-      "Sua resposta está errada, a resposta correta é: ${question.options[correctAnswer]}. Diga 'voltar correção', 'próxima correção' ou 'fechar correção'.";
+      "Sua resposta está errada, a resposta correta é: ${question.options[correctAnswer]}. O que você deseja fazer? voltar pergunta, fechar correção ou próxima correção?";
     }
     await _flutterTts.speak(resultText);
   }
 
   void _nextQuestion() {
-    _vibrate();
+    _vibrate(); // Vibração ao avançar
     if (_selectedAnswer == null) return;
 
     bool finishedQuiz = false;
 
     setState(() {
       _answers[_currentQuestionIndex] = _selectedAnswer;
-      final currentQuestion =
-      Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+
+      final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
       if (_selectedAnswer == currentQuestion.correctIndex) {
         _score++;
       }
 
-      if (_currentQuestionIndex <
-          Questions.questionsMap[widget.insectName]!.length - 1) {
+      if (_currentQuestionIndex < Questions.questionsMap[widget.insectName]!.length - 1) {
         _currentQuestionIndex++;
         _selectedAnswer = _answers[_currentQuestionIndex];
         _isAnswered = _selectedAnswer != null;
-        print("Avançando para pergunta: índice $_currentQuestionIndex");
       } else {
         finishedQuiz = true;
-        _flutterTts.stop();
+        _flutterTts.stop(); // Para o TTS ao finalizar o quiz
         _showResultDialog();
       }
     });
 
-    if (!finishedQuiz) {
-      _speakCurrentQuestion();
+    if (!finishedQuiz && mounted) {
+      Future.delayed(const Duration(milliseconds: 300),() {
+        _speakCurrentQuestion();
+      });
     }
   }
 
+  // Retrocede para a pergunta anterior, com vibração
   void _previousQuestion() {
-    _vibrate();
-    print("Antes de voltar: índice atual = $_currentQuestionIndex");
+    _vibrate(); // Vibração ao voltar
     if (_currentQuestionIndex > 0) {
       setState(() {
         _currentQuestionIndex--;
         _selectedAnswer = _answers[_currentQuestionIndex];
         _isAnswered = _selectedAnswer != null;
-        print("Depois de voltar: índice atual = $_currentQuestionIndex, resposta selecionada = $_selectedAnswer");
       });
       _speakCurrentQuestion();
-    } else {
-      print("Não é possível voltar: já na primeira pergunta (índice 0)");
     }
   }
 
+  // Exibe o diálogo com os resultados do quiz, adicionando vibração aos botões
   void _showResultDialog() {
-    _inResultMode = true;
     PageController _pageController = PageController();
 
+    // Após abrir o diálogo, dispara a leitura da primeira página
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _speakResultPage(0);
     });
 
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: false, // O usuário deve clicar no botão "Fechar" para sair
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: SizedBox(
-          height: 400,
+          height: 400, // Tamanho fixo para o diálogo
           width: double.maxFinite,
           child: Column(
             children: [
@@ -347,13 +248,13 @@ class _QuizScreenState extends State<QuizScreen> {
                 child: PageView.builder(
                   controller: _pageController,
                   onPageChanged: (index) {
+                    // Quando a página muda, o TTS lê o conteúdo correspondente
                     _flutterTts.stop();
                     _speakResultPage(index);
                   },
                   itemCount: Questions.questionsMap[widget.insectName]!.length,
                   itemBuilder: (context, index) {
-                    final question =
-                    Questions.questionsMap[widget.insectName]![index];
+                    final question = Questions.questionsMap[widget.insectName]![index];
                     final userAnswer = _answers[index];
                     final correctAnswer = question.correctIndex;
                     return Padding(
@@ -380,9 +281,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: userAnswer == correctAnswer
-                                  ? Colors.green
-                                  : Colors.red,
+                              color: userAnswer == correctAnswer ? Colors.green : Colors.red,
                             ),
                           ),
                           Container(
@@ -390,14 +289,10 @@ class _QuizScreenState extends State<QuizScreen> {
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.symmetric(vertical: 5),
                             decoration: BoxDecoration(
-                              color: userAnswer == correctAnswer
-                                  ? Colors.green.withOpacity(0.3)
-                                  : Colors.red.withOpacity(0.3),
+                              color: userAnswer == correctAnswer ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: userAnswer == correctAnswer
-                                    ? Colors.green
-                                    : Colors.red,
+                                color: userAnswer == correctAnswer ? Colors.green : Colors.red,
                                 width: 2,
                               ),
                             ),
@@ -406,9 +301,7 @@ class _QuizScreenState extends State<QuizScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: userAnswer == correctAnswer
-                                    ? Colors.green[800]
-                                    : Colors.red[800],
+                                color: userAnswer == correctAnswer ? Colors.green[800] : Colors.red[800],
                               ),
                             ),
                           ),
@@ -451,14 +344,13 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
                       onPressed: () {
-                        _vibrate();
+                        _vibrate(); // Vibração ao clicar no botão de voltar do diálogo
                         if (_pageController.page! > 0) {
                           _pageController.previousPage(
                             duration: const Duration(milliseconds: 300),
@@ -470,14 +362,13 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                     ElevatedButton(
                       onPressed: () {
-                        _vibrate();
-                        Navigator.pop(context);
-                        Navigator.pop(context);
+                        _vibrate(); // Vibração ao clicar no botão "Fechar"
+                        Navigator.pop(context); // Fecha o diálogo
+                        Navigator.pop(context); // Volta para a tela anterior
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEAB08A),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       ),
                       child: const Text(
                         'Fechar',
@@ -489,10 +380,8 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                     IconButton(
                       onPressed: () {
-                        _vibrate();
-                        if (_pageController.page! <
-                            Questions.questionsMap[widget.insectName]!.length -
-                                1) {
+                        _vibrate(); // Vibração ao clicar no botão de avançar do diálogo
+                        if (_pageController.page! < Questions.questionsMap[widget.insectName]!.length - 1) {
                           _pageController.nextPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut,
@@ -513,8 +402,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentQuestion =
-    Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCE6D8),
@@ -522,10 +410,9 @@ class _QuizScreenState extends State<QuizScreen> {
         title: Text('Quiz sobre ${widget.insectName}'),
         backgroundColor: const Color(0xFFEAB08A),
         leading: IconButton(
-          icon:
-          const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
-            _vibrate();
+            _vibrate(); // Vibração ao clicar no botão de voltar
             _flutterTts.stop();
             Navigator.pop(context);
           },
@@ -552,17 +439,19 @@ class _QuizScreenState extends State<QuizScreen> {
                 value: index,
                 groupValue: _selectedAnswer,
                 onChanged: (value) {
-                  _vibrate();
+                  _vibrate(); // Vibração ao selecionar uma opção
                   setState(() {
                     _selectedAnswer = value;
-                    _isAnswered = true;
+                    _isAnswered = true; // Habilita o botão "Próxima Pergunta"
                   });
+
+                  // Pequeno delay para dar feedback visual da seleção
+
                   Future.delayed(const Duration(milliseconds: 500), () {
-                    if (_currentQuestionIndex ==
-                        Questions.questionsMap[widget.insectName]!.length - 1) {
-                      _showResultDialog();
+                    if (_currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1) {
+                      _showResultDialog(); // Se for a última pergunta, mostra o resultado
                     } else {
-                      _nextQuestion();
+                      _nextQuestion(); // Se não for a última, vai para a próxima
                     }
                   });
                 },
@@ -573,14 +462,10 @@ class _QuizScreenState extends State<QuizScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
-                  onPressed:
-                  _currentQuestionIndex > 0 ? _previousQuestion : null,
+                  onPressed: _currentQuestionIndex > 0 ? _previousQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _currentQuestionIndex > 0
-                        ? Colors.grey
-                        : Colors.grey.shade400,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                    backgroundColor: _currentQuestionIndex > 0 ? Colors.grey : Colors.grey.shade400,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   ),
                   child: const Text(
                     'Voltar',
@@ -590,15 +475,11 @@ class _QuizScreenState extends State<QuizScreen> {
                 ElevatedButton(
                   onPressed: _isAnswered ? _nextQuestion : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                    _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                    backgroundColor: _isAnswered ? const Color(0xFFEAB08A) : Colors.grey,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   ),
                   child: Text(
-                    _currentQuestionIndex ==
-                        Questions.questionsMap[widget.insectName]!.length -
-                            1
+                    _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1
                         ? 'Confirmar Respostas'
                         : 'Próxima Pergunta',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
