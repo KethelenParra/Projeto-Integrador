@@ -1,3 +1,5 @@
+import 'package:vision_app_3d/screens/quiz_screen.dart';
+
 class Question {
   final String question;
   final List<String> options;
@@ -79,6 +81,8 @@ class Question {
   }
 
   static String _numberToWord(int number) {
+    QuizScreen quizScreen;
+
     const words = {
       1: ['um', 'hum', 'primeiro', 'primeira', 'primeira opção', 'primera opção', 'primeira opição'],
       2: ['dois', 'duas', 'segundo', 'segunda', 'segunda opção', 'segunda opição'],

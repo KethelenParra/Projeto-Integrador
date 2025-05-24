@@ -192,12 +192,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     await Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
   }
 
-  void _navigateToQuizView() {
+  void _navigateToQuizView() async{
     _navigateToScreen(QuizScreen(insectName: widget.insect.name));
+    await _speechService.stop();
   }
 
   void _navigateToListView() async {
     _navigateToScreen(const InsectListScreen());
+    await _speechService.stop();
   }
 
   bool _isVideoCommandActive = false;

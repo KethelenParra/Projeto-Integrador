@@ -291,7 +291,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
       final lowerCaseCommand = command.toLowerCase().trim();
 
       if (_matchesCommand(lowerCaseCommand, 'voltar')) {
-        await _executeCommand('Voltar', _navigateBackToHome);
+        await _executeCommand('Voltando para a tela inicial', _navigateToHome);
         return;
       }
 
@@ -301,8 +301,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
       );
 
       if (insectUrl.isNotEmpty) {
-        final insect = insectData[insectUrl];
-        await _executeCommand(insect!.name, () => _navigateToInsectDetail(insectUrl));
+        await _executeCommand(insectData[insectUrl]!.name, () => _navigateToInsectDetail(insectUrl));
       } else {
         await _handleUnrecognizedCommand();
       }
@@ -437,32 +436,98 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
     action();
   }
 
-  Future<void> _navigateToInsectDetail(String insectUrl) async {
-    final insect = insectData[insectUrl];
-    if (insect != null && mounted) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => InsectDetailsScreen(insect: insect),
-        ),
-      );
-      _handleNavigationReturn();
-    } else {
-      await _flutterTts.speak("Inseto não encontrado. Tente novamente.");
-      await Future.delayed(const Duration(milliseconds: 2000));
-      if (!_isSpeaking && mounted) {
-        _startListening();
+  Future<void> _navigateToInsectDetail(String insectUrl) async =>
+      insectData[insectUrl] != null && mounted
+          ? _navigateToDetailWithInsect(insectData[insectUrl]!)
+          : _handleInsectNotFound();
+
+  Future<void> _navigateToDetailWithInsect(Insect insect) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => InsectDetailsScreen(insect: insect)),
+    );
+    _handleNavigationReturn();
+  }
+
+  Future<void> _handleInsectNotFound() async {
+    await _flutterTts.speak("Inseto não encontrado. Tente novamente.");
+    await Future.delayed(const Duration(milliseconds: 2000));
+    if (!_isSpeaking && mounted) {
+      _startListening();
+    }
+  }
+
+  Future<void> _configureTTS() async {
+    try {
+      await _flutterTts.setLanguage("pt-BR");
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.setVolume(1.0);
+      _flutterTts.setStartHandler(() {
+        setState(() => _isSpeaking = true);
+        print("TTS started speaking");
+      });
+      _flutterTts.setCompletionHandler(() async {
+        setState(() => _isSpeaking = false);
+        print("TTS completed speaking");
+        if (mounted && !_isListening) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      });
+      _flutterTts.setErrorHandler((msg) async {
+        setState(() {
+          _isSpeaking = false;
+          _isListening = false;
+        });
+        print("Erro no TTS: $msg");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro no TTS: $msg")));
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      });
+    } catch (e) {
+      print("Erro ao configurar TTS: $e");
+    }
+  }
+
+  Future<void> _initializeVoiceFeatures() async {
+    try {
+      print("Inicializando voice features...");
+      await _configureTTS();
+      bool initialized = await _speechService.initialize(context: context);
+      if (!initialized) {
+        print("Falha ao inicializar SpeechService: ${_speechService.lastError}");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Erro ao iniciar reconhecimento de voz: ${_speechService.lastError}")),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      print("Erro ao inicializar voice features: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro: ${e.toString()}")),
+        );
       }
     }
   }
 
-  void _navigateBackToHome() {
+  void _navigateToScreen(Widget screen) async {
+    await _stopAllAudio();
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
+    if (mounted) _initializeVoiceFeatures();
+  }
+
+  void _navigateToHome() => _navigateToScreen(const HomePage());
+
+  /*void _navigateBackToHome() {
     _speechService.stop();
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const HomePage()),
     );
-  }
+  }*/
 
   Future<void> _handleNavigationReturn() async {
     if (mounted) {
