@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'questions.dart';
-import 'package:vision_app_3d/service/speechService.dart';
+import 'package:vision_app_3d/service/speech_service.dart';
 import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class QuizScreen extends StatefulWidget {

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:vision_app_3d/screens/home_page.dart';
-import 'package:vision_app_3d/service/speechService.dart';
-import 'insect_details_screen.dart';
+import 'package:vision_app_3d/screens/home_page/home_page.dart';
+import 'package:vision_app_3d/service/speech_service.dart';
+import 'insect_details/insect_details_screen.dart';
 import 'package:vision_app_3d/screens/insect.dart';
 
 class QRViewExample extends StatefulWidget {
@@ -64,8 +64,8 @@ class _QRViewExampleState extends State<QRViewExample> {
     await _flutterTts.setSpeechRate(0.6);
     await _flutterTts.speak(
       "Aponte o celular para o QR Code. Coloque o QR Code na área demarcada. "
-          "A leitura será feita automaticamente. "
-          "Diga 'voltar' para retornar.",
+      "A leitura será feita automaticamente. "
+      "Diga 'voltar' para retornar.",
     );
   }
 
@@ -73,7 +73,8 @@ class _QRViewExampleState extends State<QRViewExample> {
     bool initialized = await _speechService.initialize(context: context);
     if (!initialized && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Falha ao inicializar reconhecimento de voz")),
+        const SnackBar(
+            content: Text("Falha ao inicializar reconhecimento de voz")),
       );
     }
   }
@@ -130,7 +131,8 @@ class _QRViewExampleState extends State<QRViewExample> {
         'voltar início',
       ],
     };
-    return variations[command]?.any((variant) => input.contains(variant)) ?? false;
+    return variations[command]?.any((variant) => input.contains(variant)) ??
+        false;
   }
 
   void _navigateBackToHome() {
@@ -204,7 +206,8 @@ class _QRViewExampleState extends State<QRViewExample> {
                       controller: controller,
                       onDetect: (barcodeCapture) {
                         if (!isScanCompleted) {
-                          final String code = barcodeCapture.barcodes.first.rawValue ?? '';
+                          final String code =
+                              barcodeCapture.barcodes.first.rawValue ?? '';
                           print('Código escaneado: $code');
                           if (insectData.containsKey(code)) {
                             final insect = insectData[code]!;
@@ -223,7 +226,9 @@ class _QRViewExampleState extends State<QRViewExample> {
                             });
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('QR Code não reconhecido: $code')),
+                              SnackBar(
+                                  content:
+                                      Text('QR Code não reconhecido: $code')),
                             );
                           }
                         }
