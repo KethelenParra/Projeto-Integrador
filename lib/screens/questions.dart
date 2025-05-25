@@ -81,8 +81,6 @@ class Question {
   }
 
   static String _numberToWord(int number) {
-    QuizScreen quizScreen;
-
     const words = {
       1: ['um', 'hum', 'primeiro', 'primeira', 'primeira opção', 'primera opção', 'primeira opição'],
       2: ['dois', 'duas', 'segundo', 'segunda', 'segunda opção', 'segunda opição'],
@@ -94,7 +92,6 @@ class Question {
 
   Map<String, dynamic> matchVoiceCommand(String command) {
     final cmd = command.toLowerCase().trim();
-    // Mapeia comandos como "primeira opção", "terceira opção", etc.
     final optionPatterns = [
       {'pattern': r'primeira\s*(opção)?|opção\s*1|1', 'value': 0},
       {'pattern': r'segunda\s*(opção)?|opção\s*2|2', 'value': 1},
@@ -136,7 +133,6 @@ class Question {
     if (cmd.contains('finalizar') || cmd.contains('terminar')) {
       return {'recognized': true, 'value': 'finalizar'};
     }
-    // Não reconhecer comandos como "primeira pergunta", "terceira pergunta", etc.
     return {'recognized': false, 'value': null};
   }
 }

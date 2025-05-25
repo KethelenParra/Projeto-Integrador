@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _initializeVoiceFeatures() async {
     try {
       print("Inicializando voice features...");
-      await _configureTTS();
+      await _configureTtS();
       bool initialized = await _speechService.initialize(context: context);
       if (!initialized) {
         print("Falha ao inicializar SpeechService: ${_speechService.lastError}");
@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _configureTTS() async {
+  Future<void> _configureTtS() async {
     try {
       await _flutterTts.setLanguage("pt-BR");
       await _flutterTts.setSpeechRate(0.5);
@@ -249,7 +249,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _navigateToQRView() => _navigateToScreen(const QRViewExample());
-  void _navigateToListView() => _navigateToScreen(const InsectListScreen());
+  void _navigateToListView() {
+    _vibrate();
+    _navigateToScreen(const InsectListScreen());
+  }
 
   Future<void> _stopAllAudio() async {
     try {

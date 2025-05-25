@@ -192,7 +192,7 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     await Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
   }
 
-  void _navigateToQuizView() async{
+  void _navigateToQuizView() async {
     _navigateToScreen(QuizScreen(insectName: widget.insect.name));
     await _speechService.stop();
   }
