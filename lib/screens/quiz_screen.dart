@@ -330,9 +330,11 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     if (mounted) setState(() => _isListening = false);
 
     final String lowerCommand = command.toLowerCase().trim();
-    print("QuizScreen: Handling voice command '$lowerCommand' for Q${_currentQuestionIndex + 1}");
+    print("QuizScreen: Recebeu comando bruto: '$command', normalizado: '$lowerCommand'");
 
     final optionMatch = currentQuestion.matchVoiceCommand(lowerCommand);
+    print("QuizScreen: Resultado de matchVoiceCommand: $optionMatch");
+
     if (optionMatch['recognized'] == true) {
       final int selectedOption = optionMatch['value'] as int;
       print("QuizScreen: Opção por voz ${selectedOption + 1} RECONHECIDA para Q${_currentQuestionIndex + 1}");
@@ -368,6 +370,8 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     }
 
     final navigationCommand = Question.matchNavigationCommand(lowerCommand);
+    print("QuizScreen: Resultado de matchNavigationCommand: $navigationCommand");
+
     if (navigationCommand['recognized'] == true) {
       _canStartListeningAfterTTS = true;
       print(
@@ -399,8 +403,7 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
       return;
     }
 
-    print(
-        "QuizScreen: Comando de voz '$lowerCommand' não reconhecido como opção ou navegação para Q${_currentQuestionIndex + 1}.");
+    print("QuizScreen: Comando de voz '$lowerCommand' não reconhecido como opção ou navegação para Q${_currentQuestionIndex + 1}.");
     _canStartListeningAfterTTS = true;
     _ttsService.speak("Não entendi sua resposta. Por favor, diga o número da opção.");
   }

@@ -228,7 +228,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _matchesCommand(String input, String command) {
     final variations = {
       'escanear': ['escanear', 'scan', 'escaner', 'scanner'],
-      'lista': ['lista', 'list', 'listar'],
+      'lista': ['lista', 'list', 'listar', 'ista', 'sta', 'ta', 'lis', 'li', 'li'],
     };
     bool matched = variations[command.toLowerCase()]?.any((variant) => input.contains(variant)) ?? false;
     print("Verificando comando '$command': input='$input', matched=$matched");
