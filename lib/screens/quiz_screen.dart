@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' as AppSettingsPlugin;
 import 'package:diacritic/diacritic.dart';
+import 'package:vision_app_3d/service/speech_service.dart';
+import 'package:vision_app_3d/service/tts_service.dart';
+import 'package:vision_app_3d/service/vibration_service.dart';
 import 'questions.dart';
-import 'package:vision_app_3d/service/speechService.dart';
-import 'package:vibration/vibration.dart';
+
+// Importa a constante para sinalização
+import 'package:vision_app_3d/screens/insect_list_screen.dart'; // Para POP_TO_INSECT_LIST_SIGNAL se definido lá, ou defina localmente.
+
+// Sinalizador especial para ser retornado pela QuizScreen
+// É melhor definir isso num local comum ou passá-lo, mas para este exemplo, vamos redefinir se necessário.
+const String POP_TO_INSECT_LIST_SIGNAL = 'POP_TO_INSECT_LIST_AND_RESTART_AUDIO';
+
+Future<void> openAppSettings() async {
+  print("QuizScreen: Tentando abrir configurações do app...");
+  await AppSettingsPlugin.openAppSettings();
+}
 
 class QuizScreen extends StatefulWidget {
   final String insectName;
@@ -15,534 +27,450 @@ class QuizScreen extends StatefulWidget {
   _QuizScreenState createState() => _QuizScreenState();
 }
 
-class _QuizScreenState extends State<QuizScreen> {
+class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
+  final TtsService _ttsService = TtsService();
+  final SpeechService _speechService = SpeechService();
+  final VibrationService _vibrationService = VibrationService();
+
   int _score = 0;
   int _currentQuestionIndex = 0;
+  late List<int?> _answers;
   int? _selectedAnswer;
-  bool _isAnswered = false;
-  List<int?> _answers = List.filled(5, null);
-  final SpeechService _speechService = SpeechService();
+
   bool _isListening = false;
+  bool _isSpeaking = false;
+  bool _servicesInitialized = false;
+  bool _canStartListeningAfterTTS = false;
+
   bool _isResultDialogOpen = false;
   late PageController _pageController;
   PageController? _resultPageController;
-  bool _inResultMode = false;
-  bool _isSpeaking = false;
-  bool _isReadyToListen = false;
+  bool _isResultPageNavigating = false;
 
-  late FlutterTts _flutterTts;
+  List<Question> _currentQuizQuestions = [];
 
   @override
   void initState() {
     super.initState();
-    if (Questions.questionsMap[widget.insectName] == null || Questions.questionsMap[widget.insectName]!.isEmpty) {
-      throw Exception("Nenhuma pergunta encontrada para ${widget.insectName}");
+    WidgetsBinding.instance.addObserver(this);
+    print("QuizScreen initState for: ${widget.insectName}");
+
+    _currentQuizQuestions = Questions.questionsMap[widget.insectName] ?? [];
+    print("QuizScreen initState: Número de perguntas para '${widget.insectName}': ${_currentQuizQuestions.length}");
+
+    if (_currentQuizQuestions.isEmpty) {
+      print("ALERTA: Nenhuma pergunta encontrada para ${widget.insectName}");
+      _answers = [];
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _ttsService.speak("Desculpe, não há perguntas disponíveis para este inseto.").then((_) {
+            if (mounted) Navigator.pop(context);
+          });
+        }
+      });
+    } else {
+      _answers = List.filled(_currentQuizQuestions.length, null);
     }
 
-    _flutterTts = FlutterTts();
-    _configureTts();
-    _initializeSpeech();
-    _startQuiz();
     _pageController = PageController();
+    _initializePage();
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkMicrophonePermission();
-    });
+  Future<void> _initializePage() async {
+    if (!mounted) return;
+    await _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    if (_servicesInitialized || !mounted) return;
+    print("QuizScreen: Iniciando serviços...");
+    _servicesInitialized = true;
+    _canStartListeningAfterTTS = false;
+
+    try {
+      await _checkMicrophonePermission();
+      await _configureTts();
+      await _initializeSpeechService();
+
+      if (_currentQuizQuestions.isNotEmpty) {
+        _startQuiz();
+      } else {
+        print("QuizScreen: Sem perguntas para iniciar o quiz após inicialização dos serviços.");
+      }
+    } catch (e) {
+      print("QuizScreen: Erro na inicialização dos serviços: $e");
+      _servicesInitialized = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao iniciar Quiz: ${e.toString()}")),
+        );
+      }
+    }
+  }
+
+  Future<void> _initializeSpeechService() async {
+    if (!mounted) return;
+    print("QuizScreen: Inicializando SpeechService...");
+    bool initialized = await _speechService.initialize(context: context);
+    if (!initialized && mounted) {
+      print("QuizScreen: Falha ao inicializar SpeechService.");
+      _canStartListeningAfterTTS = true;
+      await _ttsService.speak("Serviço de comandos de voz não pôde ser iniciado.");
+    } else if (initialized) {
+      print("QuizScreen: SpeechService inicializado com sucesso.");
+    }
   }
 
   void _startQuiz() {
+    if (!mounted || _currentQuizQuestions.isEmpty) {
+      print("QuizScreen: Não pode iniciar quiz, sem perguntas.");
+      return;
+    }
+    print("QuizScreen: _startQuiz - Número de perguntas: ${_currentQuizQuestions.length}");
+    _currentQuestionIndex = 0;
+    _score = 0;
+    _answers = List.filled(_currentQuizQuestions.length, null);
+    _selectedAnswer = null;
+    _isResultDialogOpen = false;
+
+    if (_pageController.hasClients && _pageController.page?.round() != 0) {
+      _pageController.jumpToPage(0);
+    }
+
+    print("QuizScreen: Iniciando Quiz. Falando primeira pergunta.");
     _speakCurrentQuestion();
   }
 
   Future<void> _checkMicrophonePermission() async {
-    final status = await Permission.microphone.status;
+    final status = await AppSettingsPlugin.Permission.microphone.status;
     if (!status.isGranted) {
-      final result = await Permission.microphone.request();
-      if (!result.isGranted) {
-        print("Permissão de microfone negada");
+      final result = await AppSettingsPlugin.Permission.microphone.request();
+      if (!result.isGranted && mounted) {
+        print("QuizScreen: Permissão de microfone negada");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Permissão de microfone necessária para responder por voz.'),
+            action: SnackBarAction(label: 'Configurações', onPressed: openAppSettings),
+          ),
+        );
       }
     }
   }
 
-  @override
-  void dispose() {
-    _flutterTts.setCompletionHandler(() {});
-    _flutterTts.setErrorHandler((msg) {});
-    _flutterTts.stop();
-    _speechService.stop();
-    _pageController.dispose();
-    if (_resultPageController != null) {
-      _resultPageController!.dispose();
-    }
-    super.dispose();
-  }
+  Future<void> _configureTts() async {
+    print("QuizScreen: Configurando TTS...");
+    await _ttsService.initialize(
+      language: "pt-BR",
+      speechRate: 0.6,
+      volume: 1.0,
+      onStart: () {
+        if (mounted) setState(() => _isSpeaking = true);
+      },
+      onComplete: () async {
+        if (!mounted) return;
+        setState(() => _isSpeaking = false);
+        print(
+            "QuizScreen: TTS onComplete. _canStartListeningAfterTTS: $_canStartListeningAfterTTS, _isResultDialogOpen: $_isResultDialogOpen, _isResultPageNavigating: $_isResultPageNavigating");
 
-  void _closeResultDialog() {
-    _vibrate();
-    _flutterTts.stop();
-    _speechService.stop();
-    if (_resultPageController != null) {
-      _resultPageController!.dispose();
-      _resultPageController = null;
-    }
-    if (mounted) {
-      setState(() => _isResultDialogOpen = false);
-    }
-    Navigator.pop(context);
-  }
-
-  Future<void> _initializeSpeech() async {
-    try {
-      await _speechService.initialize(context: context);
-      print("SpeechService inicializado com sucesso");
-    } catch (e) {
-      print("Erro ao inicializar SpeechService: $e");
-    }
-  }
-
-  void _navigateToPage(int newIndex) {
-    if (!_resultPageController!.hasClients) return;
-
-    final currentPage = _resultPageController!.page?.round() ?? 0;
-    final totalPages = Questions.questionsMap[widget.insectName]!.length;
-
-    if (newIndex >= 0 && newIndex < totalPages && newIndex != currentPage) {
-      _vibrate();
-      _resultPageController!.animateToPage(
-        newIndex,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  Future<void> _startListening() async {
-    if (_isListening || _isSpeaking || !_isReadyToListen) {
-      print("Escuta não iniciada: _isListening=$_isListening, _isSpeaking=$_isSpeaking, _isReadyToListen=$_isReadyToListen");
-      return;
-    }
-
-    try {
-      await _speechService.listen(
-        onResult: (command) {
-          print("Comando detectado: $command");
-          if (command.trim().isNotEmpty) {
-            _handleVoiceCommand(command);
-          } else {
-            _restartListening();
-          }
-          setState(() => _isListening = false);
-        },
-        localeId: 'pt_BR',
-        listenFor: const Duration(seconds: 60),
-        pauseFor: const Duration(seconds: 5),
-        onSoundLevelChange: (level) => print("Sound level: $level"),
-      );
-      setState(() => _isListening = true);
-      print("Microfone ativado");
-    } catch (e) {
-      print("Erro ao iniciar escuta: $e");
-      _restartListening();
-    }
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && !_isListening && !_isSpeaking && _isReadyToListen) {
-        print("Escuta parou, reiniciando...");
-        _startListening();
-      }
-    });
-  }
-
-  void _restartListening() {
-    setState(() => _isListening = false);
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        print(_isListening ? "Escuta já ativa" : "Reiniciando escuta...");
-        _startListening();
-      }
-    });
-  }
-
-  void _handleVoiceCommand(String command) {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
-
-    final optionMatch = currentQuestion.matchVoiceCommand(command);
-    if (optionMatch['recognized'] == true) {
-      final int selectedOption = optionMatch['value'] as int;
-
-      setState(() {
-        _selectedAnswer = selectedOption;
-        _isAnswered = true;
-      });
-
-      _answers[_currentQuestionIndex] = selectedOption;
-
-      _vibrate();
-      _flutterTts.speak("Opção ${selectedOption + 1} selecionada");
-
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted) {
-          if (_currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1) {
-            if (_answers.every((answer) => answer != null)) {
-              _showResultDialog();
-            } else {
-              _nextQuestion();
+        if (_isResultDialogOpen) {
+          if (_canStartListeningAfterTTS) {
+            _canStartListeningAfterTTS = false;
+            print("QuizScreen: TTS onComplete (Result Dialog) - Iniciando escuta para comandos de resultado.");
+            await Future.delayed(const Duration(milliseconds: 300));
+            await _startListeningForResultCommands();
+            if (mounted) {
+              setState(() => _isResultPageNavigating = false);
+              print("QuizScreen: TTS onComplete (Result Dialog) - _isResultPageNavigating resetado para false.");
             }
           } else {
-            _nextQuestion();
+            if (mounted && _isResultPageNavigating) {
+              setState(() => _isResultPageNavigating = false);
+              print(
+                  "QuizScreen: TTS onComplete (Result Dialog) - _canStartListeningAfterTTS era false, mas _isResultPageNavigating resetado.");
+            }
+          }
+        } else {
+          if (_canStartListeningAfterTTS) {
+            _canStartListeningAfterTTS = false;
+            if (mounted &&
+                _currentQuizQuestions.isNotEmpty &&
+                _currentQuestionIndex < _currentQuizQuestions.length &&
+                _answers[_currentQuestionIndex] == null &&
+                !_isListening &&
+                _speechService.isInitialized) {
+              print("QuizScreen: TTS onComplete (Question) - Iniciando escuta para resposta da pergunta $_currentQuestionIndex.");
+              await Future.delayed(const Duration(milliseconds: 300));
+              await _startListening();
+            } else {
+              print(
+                  "QuizScreen: TTS onComplete (Question) - Condições para escuta não atendidas. Q_Index: $_currentQuestionIndex, Answered: ${_answers.length > _currentQuestionIndex && _answers[_currentQuestionIndex] != null}, Listening: $_isListening, SpeechInit: ${_speechService.isInitialized}");
+              if (mounted && !_speechService.isInitialized && !_isSpeaking) {
+                _canStartListeningAfterTTS = true;
+                await _ttsService.speak("Serviço de voz não está pronto para receber sua resposta.");
+              }
+            }
           }
         }
-      });
-
-      return;
-    }
-
-    final navigationCommand = Question.matchNavigationCommand(command);
-    if (navigationCommand != null) {
-      switch (navigationCommand['value']) {
-        case 'próxima pergunta':
-          if (_isResultDialogOpen) {
-            if (_resultPageController!.hasClients &&
-                _resultPageController!.page!.round() < Questions.questionsMap[widget.insectName]!.length - 1) {
-              _resultPageController!.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-              _speakResultPage(_resultPageController!.page!.round() + 1);
-            }
-          } else if (_isAnswered) {
-            _nextQuestion();
-          }
-          break;
-        case 'voltar pergunta':
-          if (_isResultDialogOpen) {
-            if (_resultPageController!.page! > 0) {
-              _resultPageController!.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-              _speakResultPage(_resultPageController!.page!.round() - 1);
-            }
-          } else {
-            _previousQuestion();
-          }
-          break;
-        case 'finalizar':
-          if (_answers.every((answer) => answer != null)) {
-            _showResultDialog();
-          } else {
-            _flutterTts.speak("Por favor, responda todas as perguntas antes de confirmar.");
-          }
-          break;
-      }
-    }
-  }
-
-  void _configureTts() {
-    print("Configurando TTS...");
-    _flutterTts.setLanguage("pt-BR");
-    _flutterTts.setSpeechRate(0.6);
-
-    _flutterTts.setStartHandler(() {
-      print("TTS iniciado");
-      setState(() => _isSpeaking = true);
-    });
-
-    _flutterTts.setCompletionHandler(() async {
-      print("TTS concluído");
-      setState(() {
-        _isSpeaking = false;
-        _isReadyToListen = true;
-      });
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted && !_isAnswered && !_isListening && _isReadyToListen) {
-        _startListening();
-      }
-    });
-
-    _flutterTts.setErrorHandler((msg) async {
-      print("Erro no TTS: $msg");
-      setState(() {
-        _isSpeaking = false;
-        _isReadyToListen = true;
-      });
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted && !_isAnswered && !_isListening && _isReadyToListen) {
-        _startListening();
-      }
-    });
+      },
+      onError: (msg) {
+        if (mounted) setState(() => _isSpeaking = false);
+        print("QuizScreen: TTS onError: $msg");
+        _canStartListeningAfterTTS = false;
+        if (mounted && _isResultDialogOpen && _isResultPageNavigating) {
+          setState(() => _isResultPageNavigating = false);
+          print("QuizScreen: TTS onError (Result Dialog) - _isResultPageNavigating resetado.");
+        }
+      },
+    );
   }
 
   Future<void> _speakCurrentQuestion() async {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    if (!mounted || _currentQuizQuestions.isEmpty || _currentQuestionIndex >= _currentQuizQuestions.length) {
+      print(
+          "QuizScreen: Não pode falar pergunta - índice inválido ($_currentQuestionIndex) ou sem perguntas (${_currentQuizQuestions.length}).");
+      return;
+    }
+
+    final currentQuestion = _currentQuizQuestions[_currentQuestionIndex];
     String questionText = currentQuestion.question;
     List<String> options = currentQuestion.options;
     String ttsMessage = "Pergunta ${_currentQuestionIndex + 1}: $questionText. ";
     for (int i = 0; i < options.length; i++) {
       ttsMessage += "Opção ${i + 1}: ${options[i]}. ";
     }
-    ttsMessage += "Fale a opção desejada.";
-    print("Tentando falar: $ttsMessage");
-    await _flutterTts.stop();
-    setState(() => _isSpeaking = true);
-    await _flutterTts.speak(ttsMessage);
-    print("Fala iniciada");
+    ttsMessage += "Fale o número da opção desejada.";
+
+    print("QuizScreen: Falando pergunta ${_currentQuestionIndex + 1}");
+    await _ttsService.stop();
+    _canStartListeningAfterTTS = true;
+    await _ttsService.speak(ttsMessage);
   }
 
-  void _vibrate() async {
-    if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: 200);
-    }
-  }
-
-  Future<void> _speakResultPage(int index) async {
-    if (!_isResultDialogOpen || !_resultPageController!.hasClients) {
-      print("Condições não atendidas para falar a página $index");
+  Future<void> _startListening() async {
+    if (!mounted ||
+        _isSpeaking ||
+        _isListening ||
+        !_speechService.isInitialized ||
+        _isResultDialogOpen ||
+        (_currentQuizQuestions.isNotEmpty &&
+            _currentQuestionIndex < _currentQuizQuestions.length &&
+            _answers[_currentQuestionIndex] != null)) {
+      print(
+          "QuizScreen: Não pode iniciar escuta (geral): s:$_isSpeaking, l:$_isListening, speechInit:${_speechService.isInitialized}, resultOpen:$_isResultDialogOpen, answered:${_answers.length > _currentQuestionIndex && _answers[_currentQuestionIndex] != null}");
       return;
     }
 
-    print("Preparando para falar a página $index");
-
-    await _flutterTts.stop();
-    setState(() => _isSpeaking = true);
-
-    _flutterTts.setCompletionHandler(() async {
-      print("Fala concluída - ativando microfone");
-      setState(() => _isSpeaking = false);
-      if (mounted && _isResultDialogOpen) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        _startListeningForResultCommands();
-      }
-    });
-
-    final question = Questions.questionsMap[widget.insectName]![index];
-    final userAnswer = _answers[index];
-    final correctAnswer = question.correctIndex;
-    final totalPages = Questions.questionsMap[widget.insectName]!.length;
-
-    String message = "Pergunta ${index + 1} de $totalPages: ${question.question}. ";
-    message += "Sua resposta: ${question.options[userAnswer ?? 0]}. ";
-
-    if (userAnswer == correctAnswer) {
-      message += "Resposta correta. ";
-    } else {
-      message += "Resposta incorreta. A resposta correta é: ${question.options[correctAnswer]}. ";
-    }
-
-    message += "O que você deseja fazer? ";
-    if (index > 0) message += "voltar pergunta, ";
-    if (index < totalPages - 1) message += "próxima correção, ";
-    message += "ou fechar correção?";
-
-    print("Iniciando fala: $message");
-    await _flutterTts.speak(message);
-  }
-
-  Future<void> _startListeningForResultCommands() async {
-    if (_isSpeaking || !mounted || !_speechService.permissionGranted || !_isResultDialogOpen) {
-      print("Não pode iniciar escuta: Speaking=$_isSpeaking, Mounted=$mounted, Permission=${_speechService.permissionGranted}, DialogOpen=$_isResultDialogOpen");
-      return;
-    }
-
+    print("QuizScreen: Iniciando escuta para resposta da pergunta $_currentQuestionIndex...");
+    if (mounted) setState(() => _isListening = true);
     try {
-      await _speechService.stop();
       await _speechService.listen(
         onResult: (command) {
-          print("Comando recebido: $command");
-          if (command.trim().isNotEmpty) {
-            _handleResultDialogCommand(command.toLowerCase());
+          if (mounted && command.trim().isNotEmpty) {
+            _handleVoiceCommand(command);
           }
         },
         localeId: 'pt_BR',
-        listenFor: const Duration(seconds: 120),
-        pauseFor: const Duration(seconds: 2),
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 7),
+        autoRestartOnNoMatch: true,
+        onSoundLevelChange: (level) {},
       );
-      print("Microfone ativado com sucesso para comandos de resultado!");
-      setState(() => _isListening = true);
     } catch (e) {
-      print("Erro ao ativar microfone para comandos de resultado: $e");
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && _isResultDialogOpen) {
-          _startListeningForResultCommands();
-        }
-      });
+      print("QuizScreen: Erro ao iniciar escuta: $e");
+      if (mounted) {
+        setState(() => _isListening = false);
+        _canStartListeningAfterTTS = true;
+        await _restartListening(isForResultDialog: false);
+      }
     }
   }
 
-  void _restartListeningForResultCommands() {
-    setState(() => _isListening = false);
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
+  Future<void> _restartListening({required bool isForResultDialog, int delayMs = 1000}) async {
+    if (!mounted) return;
+    print("QuizScreen: Tentando reiniciar escuta em $delayMs ms. Para diálogo: $isForResultDialog");
+
+    if (_isListening) {
+      await _speechService.stop();
+      if (mounted) setState(() => _isListening = false);
+    }
+    if (_isSpeaking) {
+      print("QuizScreen: Não pode reiniciar escuta: TTS falando.");
+      return;
+    }
+    await Future.delayed(Duration(milliseconds: delayMs));
+    if (mounted && !_isSpeaking && !_isListening) {
+      if (isForResultDialog && _isResultDialogOpen) {
+        print("QuizScreen: Reiniciando escuta para o diálogo de resultados.");
         _startListeningForResultCommands();
+      } else if (!isForResultDialog &&
+          !_isResultDialogOpen &&
+          (_currentQuizQuestions.isNotEmpty &&
+              _currentQuestionIndex < _currentQuizQuestions.length &&
+              _answers[_currentQuestionIndex] == null)) {
+        print("QuizScreen: Reiniciando escuta para perguntas.");
+        _startListening();
+      } else {
+        print(
+            "QuizScreen: Condições de reinício de escuta não correspondentes ou pergunta já respondida. CurrentIndex: $_currentQuestionIndex, AnswersLength: ${_answers.length}");
       }
-    });
+    }
   }
 
-  void _handleResultDialogCommand(String command) {
-    setState(() => _isListening = false);
+  void _handleVoiceCommand(String command) {
+    if (!mounted || _isResultDialogOpen) return;
 
-    if (!_resultPageController!.hasClients) {
-      _restartListeningForResultCommands();
+    if (_currentQuestionIndex >= _currentQuizQuestions.length) {
+      print(
+          "QuizScreen: _handleVoiceCommand - _currentQuestionIndex fora dos limites. Index: $_currentQuestionIndex, Length: ${_currentQuizQuestions.length}");
+      return;
+    }
+    final currentQuestion = _currentQuizQuestions[_currentQuestionIndex];
+
+    _speechService.stop();
+    if (mounted) setState(() => _isListening = false);
+
+    final String lowerCommand = command.toLowerCase().trim();
+    print("QuizScreen: Handling voice command '$lowerCommand' for Q${_currentQuestionIndex + 1}");
+
+    final optionMatch = currentQuestion.matchVoiceCommand(lowerCommand);
+    if (optionMatch['recognized'] == true) {
+      final int selectedOption = optionMatch['value'] as int;
+      print("QuizScreen: Opção por voz ${selectedOption + 1} RECONHECIDA para Q${_currentQuestionIndex + 1}");
+      _vibrationService.vibrate();
+
+      if (mounted) {
+        setState(() {
+          _answers[_currentQuestionIndex] = selectedOption;
+          _selectedAnswer = selectedOption;
+        });
+      }
+      _canStartListeningAfterTTS = true;
+      _ttsService.speak("Opção ${selectedOption + 1} selecionada.").then((_) {
+        if (mounted) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
+
+            print(
+                "QuizScreen: Voice Answer - Processando após TTS. CurrentIndex: $_currentQuestionIndex, TotalQuestions: ${_currentQuizQuestions.length}");
+
+            if (_currentQuestionIndex < _currentQuizQuestions.length - 1) {
+              print("QuizScreen: Voice Answer - Avançando para próxima pergunta.");
+              _processAnswerAndAdvance();
+            } else {
+              print(
+                  "QuizScreen: Voice Answer - Última pergunta respondida (Q${_currentQuestionIndex + 1}). Mostrando resultados.");
+              _processAnswerAndShowResults();
+            }
+          });
+        }
+      });
       return;
     }
 
-    final currentPage = _resultPageController!.page?.round() ?? 0;
-    final totalPages = Questions.questionsMap[widget.insectName]!.length;
-
-    Future<void> speakAndRestart(String message) async {
-      await _flutterTts.stop();
-      setState(() => _isSpeaking = true);
-      await _flutterTts.speak(message);
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted && !_isListening && _isResultDialogOpen) {
-        _startListeningForResultCommands();
+    final navigationCommand = Question.matchNavigationCommand(lowerCommand);
+    if (navigationCommand['recognized'] == true) {
+      _canStartListeningAfterTTS = true;
+      print(
+          "QuizScreen: Comando de navegação por voz '${navigationCommand['value']}' reconhecido para Q${_currentQuestionIndex + 1}.");
+      switch (navigationCommand['value']) {
+        case 'próxima pergunta':
+          if (_answers[_currentQuestionIndex] != null) {
+            if (_currentQuestionIndex < _currentQuizQuestions.length - 1) {
+              _nextQuestion();
+            } else {
+              _ttsService.speak("Você já está na última pergunta. Diga finalizar para ver os resultados.");
+            }
+          } else {
+            _ttsService.speak("Por favor, responda a pergunta atual antes de avançar.");
+          }
+          break;
+        case 'voltar pergunta':
+          _previousQuestion();
+          break;
+        case 'finalizar':
+          print("QuizScreen: Comando de voz 'finalizar'.");
+          if (_answers.every((answer) => answer != null)) {
+            _showResultDialog();
+          } else {
+            _ttsService.speak("Responda todas as perguntas antes de finalizar.");
+          }
+          break;
       }
+      return;
     }
 
-    if (_matchesCommand(command, 'fechar correcao')) {
-      _closeResultDialog();
-    } else if (_matchesCommand(command, 'voltar pergunta')) {
-      if (currentPage > 0) {
-        _navigateToPage(currentPage - 1);
-      } else {
-        speakAndRestart("Você já está na primeira pergunta.");
-      }
-    } else if (_matchesCommand(command, 'proxima correcao')) {
-      if (_resultPageController!.hasClients && currentPage < Questions.questionsMap[widget.insectName]!.length - 1) {
-        _vibrate();
-        _resultPageController!.nextPage(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      } else {
-        speakAndRestart("Você já está na última pergunta.");
-      }
-    } else {
-      speakAndRestart("Comando não reconhecido. Por favor, diga: voltar pergunta, próxima correção ou fechar correção.");
-    }
+    print(
+        "QuizScreen: Comando de voz '$lowerCommand' não reconhecido como opção ou navegação para Q${_currentQuestionIndex + 1}.");
+    _canStartListeningAfterTTS = true;
+    _ttsService.speak("Não entendi sua resposta. Por favor, diga o número da opção.");
   }
 
-  bool _matchesCommand(String input, String command) {
-    final variations = <String, Set<String>>{
-      'fechar correcao': {
-        'fechar correção',
-        'fechar correcao',
-        'fechar',
-        'fecha correção',
-        'fecha correcao',
-        'fechar resultado',
-        'sair',
-        'sair correção',
-        'sair correcao',
-        'close',
-        'fechar corr',
-        'fecharcorrecao',
-        'fechar cor',
-        'fechar quiz',
-        'fechar quizz',
-        'fechar kwez',
-      },
-      'voltar pergunta': {
-        'voltar pergunta',
-        'voltar',
-        'volta pergunta',
-        'voltar pra pergunta',
-        'voltar pergunta anterior',
-        'pergunta anterior',
-        'anterior',
-        'back question',
-        'previous question',
-        'voltar perg',
-        'volt pergunta',
-        'voltar per',
-        'voltar p',
-        'voltarpergunta',
-        'voltar pra perg',
-        'voltar pra trás',
-        'voltar atrás',
-        'voltar atras',
-      },
-      'proxima correcao': {
-        'próxima correção',
-        'proxima correcao',
-        'próxima',
-        'proxima',
-        'próxima pergunta',
-        'proxima pergunta',
-        'próxima corr',
-        'proxima corr',
-        'next correction',
-        'next question',
-        'próxima corre',
-        'proxima corre',
-        'próximacorreção',
-        'proximacorrecao',
-        'próxima pergunta corrigida',
-        'proxima pergunta corrigida',
-        'avançar',
-        'avancar',
-        'avançar correção',
-        'avancar correcao',
-      },
-    };
+  void _processAnswerAndAdvance() {
+    if (!mounted || _answers[_currentQuestionIndex] == null) return;
+    print("QuizScreen: _processAnswerAndAdvance - Avançando da pergunta ${_currentQuestionIndex + 1}.");
+    _nextQuestion();
+  }
 
-    String normalize(String text) {
-      return removeDiacritics(text).toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
-    }
-
-    final normalizedInput = normalize(input);
-    final normalizedCommand = normalize(command);
-
-    final matched = variations[normalizedCommand]?.any((variant) => normalizedInput.contains(normalize(variant))) ?? false;
-
-    print("Verificando comando '$command': input='$input', matched=$matched");
-    return matched;
+  void _processAnswerAndShowResults() {
+    if (!mounted || _answers[_currentQuestionIndex] == null) return;
+    print("QuizScreen: _processAnswerAndShowResults - Preparando para mostrar resultados após Q${_currentQuestionIndex + 1}.");
+    _showResultDialog();
   }
 
   void _nextQuestion() {
-    if (!_isAnswered) return;
+    if (!mounted) return;
 
-    _vibrate();
+    if (_answers[_currentQuestionIndex] == null) {
+      print("QuizScreen: _nextQuestion - Tentando avançar, mas pergunta atual ($_currentQuestionIndex) não respondida.");
+      _canStartListeningAfterTTS = true;
+      _ttsService.speak("Por favor, responda a pergunta atual antes de avançar.");
+      return;
+    }
 
-    setState(() {
-      _answers[_currentQuestionIndex] = _selectedAnswer;
-
-      final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
-      if (_selectedAnswer == currentQuestion.correctIndex) {
-        _score++;
+    if (_currentQuestionIndex < _currentQuizQuestions.length - 1) {
+      _vibrationService.vibrate();
+      print("QuizScreen: _nextQuestion - Avançando do índice $_currentQuestionIndex para o próximo.");
+      if (mounted && _pageController.hasClients) {
+        _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
       }
-
-      if (_currentQuestionIndex < Questions.questionsMap[widget.insectName]!.length - 1) {
-        _currentQuestionIndex++;
-        _selectedAnswer = _answers[_currentQuestionIndex];
-        _isAnswered = _selectedAnswer != null;
-      } else {
-        _showResultDialog();
-        return;
-      }
-    });
-
-    _speechService.stop();
-    setState(() => _isListening = false);
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _speakCurrentQuestion();
-    });
+    } else {
+      print("QuizScreen: _nextQuestion - Chamado na última pergunta ($_currentQuestionIndex). Deveria mostrar resultados.");
+      _showResultDialog();
+    }
   }
 
   void _previousQuestion() {
-    _vibrate();
-    if (_currentQuestionIndex > 0) {
-      setState(() {
-        _currentQuestionIndex--;
-        _selectedAnswer = _answers[_currentQuestionIndex];
-        _isAnswered = _selectedAnswer != null;
-      });
-      _speakCurrentQuestion();
+    if (!mounted || _currentQuestionIndex <= 0) return;
+    _vibrationService.vibrate();
+    print("QuizScreen: _previousQuestion - Voltando do índice $_currentQuestionIndex para o anterior.");
+    if (mounted && _pageController.hasClients) {
+      _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
     }
   }
 
   void _showResultDialog() {
-    _inResultMode = true;
-    setState(() => _isResultDialogOpen = true);
+    if (!mounted || _isResultDialogOpen) {
+      print("QuizScreen: _showResultDialog - Já aberto ou não montado. Retornando.");
+      return;
+    }
+    _stopAllServices();
 
+    _score = 0;
+    for (int i = 0; i < _currentQuizQuestions.length; i++) {
+      if (_answers[i] != null && _answers[i] == _currentQuizQuestions[i].correctIndex) {
+        _score++;
+      }
+    }
+    print("QuizScreen: Mostrando diálogo de resultados. Pontuação FINAL RECALCULADA: $_score / ${_answers.length}");
+
+    setState(() => _isResultDialogOpen = true);
     _resultPageController = PageController();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _speakResultPage(0);
+    _canStartListeningAfterTTS = true;
+    _ttsService.speak("Quiz finalizado! Você acertou $_score de ${_answers.length} perguntas. Veja a correção.").then((_) {
+      if (mounted && _isResultDialogOpen) {
+        _speakResultPage(0);
+      }
     });
 
     showDialog(
@@ -550,161 +478,124 @@ class _QuizScreenState extends State<QuizScreen> {
       barrierDismissible: false,
       builder: (context) => WillPopScope(
         onWillPop: () async {
-          _closeResultDialog();
-          return true;
+          print("QuizScreen: WillPopScope no diálogo de resultados - chamando _closeResultDialogButtonPressed");
+          _closeResultDialogButtonPressed();
+          return false;
         },
         child: Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           child: SizedBox(
-            height: 400,
+            height: 450,
             width: double.maxFinite,
             child: Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    "Resultado: $_score / ${_answers.length} corretas",
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
                 Expanded(
                   child: PageView.builder(
                     controller: _resultPageController,
                     onPageChanged: (index) {
-                      _flutterTts.stop();
-                      setState(() => _isSpeaking = true);
+                      _ttsService.stop();
+                      _canStartListeningAfterTTS = true;
                       _speakResultPage(index);
                     },
-                    itemCount: Questions.questionsMap[widget.insectName]!.length,
+                    itemCount: _currentQuizQuestions.length,
                     itemBuilder: (context, index) {
-                      final question = Questions.questionsMap[widget.insectName]![index];
+                      final question = _currentQuizQuestions[index];
                       final userAnswer = _answers[index];
                       final correctAnswer = question.correctIndex;
+                      final bool isCorrect = userAnswer == correctAnswer;
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Pergunta ${index + 1}:',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              question.question,
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'Sua Resposta:',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: userAnswer == correctAnswer ? Colors.green : Colors.red,
-                              ),
-                            ),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              margin: const EdgeInsets.symmetric(vertical: 5),
-                              decoration: BoxDecoration(
-                                color: userAnswer == correctAnswer ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: userAnswer == correctAnswer ? Colors.green : Colors.red,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Text(
-                                question.options[userAnswer ?? 0],
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: userAnswer == correctAnswer ? Colors.green[800] : Colors.red[800],
-                                ),
-                              ),
-                            ),
-                            if (userAnswer != correctAnswer) ...[
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Resposta Correta:',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                ),
-                              ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('Pergunta ${index + 1}:', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              Text(question.question, style: const TextStyle(fontSize: 16)),
+                              const SizedBox(height: 16),
+                              Text('Sua Resposta:',
+                                  style: TextStyle(
+                                      fontSize: 14, fontWeight: FontWeight.bold, color: isCorrect ? Colors.green : Colors.red)),
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                margin: const EdgeInsets.symmetric(vertical: 5),
+                                padding: const EdgeInsets.all(10),
+                                margin: const EdgeInsets.symmetric(vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Colors.green,
-                                    width: 2,
-                                  ),
+                                  color: isCorrect ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: isCorrect ? Colors.green : Colors.red, width: 1),
                                 ),
-                                child: Text(
-                                  question.options[correctAnswer],
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green[800],
-                                  ),
-                                ),
+                                child: Text(userAnswer != null ? question.options[userAnswer] : "Não respondida",
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: isCorrect ? Colors.green[800] : Colors.red[800])),
                               ),
+                              if (!isCorrect) ...[
+                                const SizedBox(height: 8),
+                                const Text('Resposta Correta:',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(10),
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.green, width: 1),
+                                  ),
+                                  child: Text(question.options[correctAnswer],
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green[800])),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       );
                     },
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.all(8.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       IconButton(
-                        onPressed: _resultPageController!.hasClients && _resultPageController!.page! > 0
+                        icon: const Icon(Icons.arrow_back_ios),
+                        onPressed: (_resultPageController?.hasClients ?? false) && (_resultPageController!.page?.round() ?? 0) > 0
                             ? () {
-                          _vibrate();
-                          _resultPageController!.previousPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        }
+                                _vibrationService.vibrate();
+                                if (mounted) setState(() => _isResultPageNavigating = true);
+                                _resultPageController!
+                                    .previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
+                              }
                             : null,
-                        icon: const Icon(Icons.arrow_back),
                       ),
                       ElevatedButton(
-                        onPressed: () {
-                          _vibrate();
-                          Navigator.pop(context);
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEAB08A),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        ),
-                        child: const Text(
-                          'Fechar',
-                          style: TextStyle(
-                            color: Color.fromARGB(255, 0, 0, 0),
-                            fontSize: 16,
-                          ),
-                        ),
+                        onPressed: _closeResultDialogButtonPressed,
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEAB08A)),
+                        child: const Text('Fechar Correção', style: TextStyle(color: Colors.black)),
                       ),
                       IconButton(
-                        onPressed: _resultPageController!.hasClients && _resultPageController!.page! < Questions.questionsMap[widget.insectName]!.length - 1
+                        icon: const Icon(Icons.arrow_forward_ios),
+                        onPressed: (_resultPageController?.hasClients ?? false) &&
+                                ((_resultPageController!.page?.round() ?? 0) < _currentQuizQuestions.length - 1)
                             ? () {
-                          _vibrate();
-                          _resultPageController!.nextPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        }
+                                _vibrationService.vibrate();
+                                if (mounted) setState(() => _isResultPageNavigating = true);
+                                _resultPageController!
+                                    .nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
+                              }
                             : null,
-                        icon: const Icon(Icons.arrow_forward),
                       ),
                     ],
                   ),
@@ -714,94 +605,453 @@ class _QuizScreenState extends State<QuizScreen> {
           ),
         ),
       ),
-    );
+    ).then((_) {
+      if (_isResultDialogOpen && mounted) {
+        _closeResultDialogCleanup(popQuizScreen: true);
+      }
+    });
+  }
+
+  void _closeResultDialogCleanup({bool popQuizScreen = true}) {
+    print("QuizScreen: _closeResultDialogCleanup - popQuizScreen: $popQuizScreen");
+    if (mounted) {
+      setState(() {
+        _isResultDialogOpen = false;
+        _isResultPageNavigating = false;
+      });
+    }
+    _resultPageController?.dispose();
+    _resultPageController = null;
+
+    if (popQuizScreen && mounted && Navigator.canPop(context)) {
+      print("QuizScreen: Saindo da tela de Quiz (voltando para tela anterior).");
+      Navigator.of(context).pop();
+    } else if (popQuizScreen && mounted) {
+      print("QuizScreen: Não pode fazer pop da QuizScreen (talvez seja a raiz).");
+    }
+  }
+
+  // Chamado pelo botão "Fechar Correção" no diálogo
+  void _closeResultDialogButtonPressed() {
+    if (!mounted) return;
+    print("QuizScreen: Botão 'Fechar Correção' pressionado.");
+    _vibrationService.vibrate();
+    _stopAllServices();
+
+    if (_isResultDialogOpen && Navigator.of(context, rootNavigator: true).canPop()) {
+      Navigator.of(context, rootNavigator: true).pop();
+      // O .then() do showDialog chamará _closeResultDialogCleanup,
+      // que fará o pop da QuizScreen, retornando para InsectDetailsScreen.
+    } else if (mounted) {
+      _closeResultDialogCleanup(popQuizScreen: true);
+    }
+  }
+
+  // Chamado pelo comando de voz "fechar correção"
+  Future<void> _closeResultDialogAndGoToList() async {
+    print("QuizScreen: Comando de voz 'fechar correção' - preparando para voltar à lista de insetos.");
+    await _stopAllServices();
+    if (mounted) {
+      // Primeiro, fecha o diálogo de resultados, se estiver aberto.
+      if (_isResultDialogOpen && Navigator.of(context, rootNavigator: true).canPop()) {
+        print("QuizScreen: Fechando diálogo de resultados...");
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      // Em seguida, faz pop da QuizScreen, retornando o sinalizador.
+      if (mounted && Navigator.canPop(context)) {
+        print("QuizScreen: Fazendo Pop da QuizScreen com sinalizador: $POP_TO_INSECT_LIST_SIGNAL");
+        Navigator.of(context).pop(POP_TO_INSECT_LIST_SIGNAL);
+      } else if (mounted) {
+        // Se não puder fazer pop (ex: QuizScreen é a primeira tela), navega diretamente para a lista.
+        // Isto é um fallback e pode não ser o comportamento ideal em todos os cenários.
+        print("QuizScreen: Não foi possível fazer pop da QuizScreen. Navegando diretamente para InsectListScreen.");
+        // Para garantir que volte para a lista e ela reinicie, usamos pushAndRemoveUntil
+        Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+                builder: (_) => const InsectListScreen(),
+                settings: const RouteSettings(name: '/insectList')), // Dê um nome à rota se precisar identificá-la
+            (route) => route.isFirst); // Remove todas as rotas até a primeira (que geralmente é a home ou a lista)
+        // Se a InsectListScreen não for a primeira, ajuste o predicado de remoção.
+        // Ou, se a InsectListScreen sempre deve ser a base após este comando:
+        // (route) => route.settings.name == '/insectList' || route.isFirst (se InsectList for a primeira)
+        // Ou, mais simples se você sabe que a lista é a raiz:
+        // (route) => false (remove tudo e push a nova) - mas isso perde o estado da HomePage se ela for a raiz.
+        // A melhor abordagem depende da sua estrutura de navegação global.
+        // Para o seu pedido, voltar para a lista e ela reiniciar,
+        // Navigator.of(context).pop(POP_TO_INSECT_LIST_SIGNAL) é o ideal se a pilha estiver correta.
+        // O fallback abaixo é mais agressivo.
+        // Navigator.of(context).pushAndRemoveUntil(
+        //   MaterialPageRoute(builder: (context) => const InsectListScreen()),
+        //   (Route<dynamic> route) => false, // Remove todas as rotas anteriores
+        // );
+      }
+    }
+  }
+
+  Future<void> _speakResultPage(int index) async {
+    if (!mounted || !_isResultDialogOpen || index < 0 || index >= _currentQuizQuestions.length) {
+      print("QuizScreen: Condições não atendidas para falar a página de resultado $index.");
+      if (mounted && _isResultDialogOpen && _isResultPageNavigating) {
+        setState(() => _isResultPageNavigating = false);
+        print("QuizScreen: _speakResultPage - _isResultPageNavigating resetado (condição não atendida).");
+      }
+      return;
+    }
+    print("QuizScreen: Falando resultado da pergunta ${index + 1}.");
+
+    await _ttsService.stop();
+    _canStartListeningAfterTTS = true;
+
+    final question = _currentQuizQuestions[index];
+    final userAnswerIndex = _answers[index];
+    final correctAnswerIndex = question.correctIndex;
+    final totalPages = _currentQuizQuestions.length;
+
+    String message = "Correção da pergunta ${index + 1} de $totalPages: ${question.question}. ";
+    if (userAnswerIndex != null) {
+      message += "Sua resposta foi ${question.options[userAnswerIndex]}. ";
+      if (userAnswerIndex == correctAnswerIndex) {
+        message += "Resposta correta! ";
+      } else {
+        message += "Resposta incorreta. A resposta correta é: ${question.options[correctAnswerIndex]}. ";
+      }
+    } else {
+      message += "Você não respondeu esta pergunta. A resposta correta é: ${question.options[correctAnswerIndex]}.";
+    }
+
+    if (totalPages > 1) {
+      message += " Diga 'próxima correção', 'voltar pergunta', ou 'fechar correção'.";
+    } else {
+      message += " Diga 'fechar correção'.";
+    }
+
+    await _ttsService.speak(message);
+  }
+
+  Future<void> _startListeningForResultCommands() async {
+    if (!mounted || _isSpeaking || _isListening || !_speechService.isInitialized || !_isResultDialogOpen) {
+      print(
+          "QuizScreen: Não pode iniciar escuta (resultados): s:$_isSpeaking, l:$_isListening, speechInit:${_speechService.isInitialized}, dialogOpen:$_isResultDialogOpen");
+      if (mounted && _isResultDialogOpen && _isResultPageNavigating) {
+        setState(() => _isResultPageNavigating = false);
+        print(
+            "QuizScreen: _startListeningForResultCommands - _isResultPageNavigating resetado (condição não atendida para escuta).");
+      }
+      return;
+    }
+    print("QuizScreen: Iniciando escuta para comandos do diálogo de resultados...");
+    if (mounted) setState(() => _isListening = true);
+    try {
+      await _speechService.listen(
+        onResult: (command) {
+          if (mounted && command.trim().isNotEmpty) {
+            _handleResultDialogCommand(command);
+          }
+        },
+        localeId: 'pt_BR',
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 5),
+        autoRestartOnNoMatch: true,
+      );
+    } catch (e) {
+      print("QuizScreen: Erro ao iniciar escuta para resultados: $e");
+      if (mounted) {
+        setState(() => _isListening = false);
+        if (_isResultPageNavigating) setState(() => _isResultPageNavigating = false);
+        _canStartListeningAfterTTS = true;
+        await _restartListening(isForResultDialog: true, delayMs: 500);
+      }
+    }
+  }
+
+  void _handleResultDialogCommand(String command) async {
+    if (!mounted || !_isResultDialogOpen) return;
+    if (_isResultPageNavigating) {
+      print("QuizScreen: ResultDialog - Navegação já em progresso. Ignorando comando: $command");
+      return;
+    }
+
+    _speechService.stop();
+    if (mounted) setState(() => _isListening = false);
+    _ttsService.stop();
+    if (mounted) setState(() => _isSpeaking = false);
+
+    final lowerCommand = command.toLowerCase().trim();
+    print("QuizScreen: Comando no diálogo de resultado: '$lowerCommand'");
+
+    final currentPage = _resultPageController?.page?.round() ?? 0;
+    final totalPages = _currentQuizQuestions.length;
+
+    if (_matchesCommandForResultDialog(lowerCommand, 'fechar correcao')) {
+      await _closeResultDialogAndGoToList();
+    } else if (_matchesCommandForResultDialog(lowerCommand, 'voltar pergunta')) {
+      if (currentPage > 0 && _resultPageController != null && _resultPageController!.hasClients) {
+        print("QuizScreen: ResultDialog - Comando 'voltar pergunta'. Setando lock de navegação.");
+        setState(() => _isResultPageNavigating = true);
+        await _resultPageController!.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
+      } else {
+        _canStartListeningAfterTTS = true;
+        await _ttsService.speak("Você já está na primeira pergunta da correção.");
+        if (mounted) setState(() => _isResultPageNavigating = false);
+      }
+    } else if (_matchesCommandForResultDialog(lowerCommand, 'proxima correcao')) {
+      if (currentPage < totalPages - 1 && _resultPageController != null && _resultPageController!.hasClients) {
+        print("QuizScreen: ResultDialog - Comando 'próxima correção'. Setando lock de navegação.");
+        setState(() => _isResultPageNavigating = true);
+        await _resultPageController!.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
+      } else {
+        _canStartListeningAfterTTS = true;
+        await _ttsService.speak("Você já está na última pergunta da correção.");
+        if (mounted) setState(() => _isResultPageNavigating = false);
+      }
+    } else {
+      _canStartListeningAfterTTS = true;
+      await _ttsService.speak("Comando não reconhecido. Diga 'próxima correção', 'voltar pergunta' ou 'fechar correção'.");
+      if (mounted) setState(() => _isResultPageNavigating = false);
+    }
+  }
+
+  bool _matchesCommandForResultDialog(String input, String commandKey) {
+    final variations = <String, Set<String>>{
+      'fechar correcao': {
+        'fechar correção',
+        'fechar correcao',
+        'fechar',
+        'sair',
+        'terminar correção',
+        'finalizar correção',
+        'fechar resultado',
+        'lista de insetos',
+        'ir para lista',
+        'voltar para lista'
+      },
+      'voltar pergunta': {'voltar pergunta', 'anterior', 'voltar correção', 'correção anterior', 'pergunta anterior'},
+      'proxima correcao': {'próxima correção', 'proxima correcao', 'seguinte', 'avançar correção', 'próxima', 'próxima pergunta'},
+    };
+    String normalize(String text) => removeDiacritics(text).toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
+    final normalizedInput = normalize(input);
+    bool matched = variations[commandKey]?.any((variant) => normalizedInput.contains(normalize(variant))) ?? false;
+    print("QuizScreen (Result Dialog): Match for '$commandKey' with input '$input' (normalized '$normalizedInput'): $matched");
+    return matched;
+  }
+
+  Future<void> _stopAllServices() async {
+    print("QuizScreen: Parando todos os serviços...");
+    _canStartListeningAfterTTS = false;
+    await _ttsService.stop();
+    await _speechService.stop();
+    if (mounted) {
+      setState(() {
+        _isSpeaking = false;
+        _isListening = false;
+        _isResultPageNavigating = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    print("QuizScreen: Dispose");
+    WidgetsBinding.instance.removeObserver(this);
+    _stopAllServices();
+    _pageController.dispose();
+    _resultPageController?.dispose();
+    _servicesInitialized = false;
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print("QuizScreen: AppLifecycleState: $state");
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (mounted && !_servicesInitialized) {
+          print("QuizScreen: App resumido, _servicesInitialized é false. Chamando _initializePage()");
+          _initializePage();
+        } else if (mounted && _servicesInitialized && !_isSpeaking && !_isListening) {
+          if (_isResultDialogOpen && !_isResultPageNavigating) {
+            print("QuizScreen: App resumido. Reiniciando escuta para diálogo de resultados.");
+            _canStartListeningAfterTTS = true;
+            _restartListening(isForResultDialog: true, delayMs: 500);
+          } else if (!_isResultDialogOpen &&
+              (_currentQuizQuestions.isNotEmpty &&
+                  _currentQuestionIndex < _currentQuizQuestions.length &&
+                  _answers[_currentQuestionIndex] == null)) {
+            print("QuizScreen: App resumido. Reiniciando escuta para perguntas.");
+            _canStartListeningAfterTTS = true;
+            _restartListening(isForResultDialog: false, delayMs: 500);
+          }
+        }
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        print("QuizScreen: App pausado/inativo.");
+        _stopAllServices();
+        break;
+      default:
+        break;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentQuestion = Questions.questionsMap[widget.insectName]![_currentQuestionIndex];
+    if (_currentQuizQuestions.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Quiz sobre ${widget.insectName}'),
+          backgroundColor: const Color(0xFFEAB08A),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
+            onPressed: () {
+              _vibrationService.vibrate();
+              _stopAllServices();
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        body: const Center(child: Text('Nenhuma pergunta disponível para este inseto.')),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCE6D8),
       appBar: AppBar(
-        title: Text('Quiz sobre ${widget.insectName}'),
+        title: Text('Quiz: ${widget.insectName}'),
         backgroundColor: const Color(0xFFEAB08A),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
-            _vibrate();
-            _flutterTts.stop();
+            _vibrationService.vibrate();
+            _stopAllServices();
             Navigator.pop(context);
           },
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Pergunta ${_currentQuestionIndex + 1}/${Questions.questionsMap[widget.insectName]!.length}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Text(currentQuestion.question, style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 20),
-            ...List.generate(currentQuestion.options.length, (index) {
-              return RadioListTile<int>(
-                title: Text(currentQuestion.options[index]),
-                value: index,
-                groupValue: _selectedAnswer,
-                onChanged: (value) {
-                  _vibrate();
-                  setState(() {
-                    _selectedAnswer = value;
-                    _isAnswered = true;
-                  });
-                  Future.delayed(const Duration(milliseconds: 500), () {
-                    if (_currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1) {
-                      _showResultDialog();
-                    } else {
-                      _nextQuestion();
-                    }
-                  });
-                },
-              );
-            }),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: PageView.builder(
+        controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _currentQuizQuestions.length,
+        onPageChanged: (index) {
+          if (mounted) {
+            print("QuizScreen: PageView onPageChanged para índice $index");
+            setState(() {
+              _currentQuestionIndex = index;
+              _selectedAnswer = _answers[index];
+            });
+            _ttsService.stop();
+            _speechService.stop();
+            if (mounted) setState(() => _isListening = false);
+            _speakCurrentQuestion();
+          }
+        },
+        itemBuilder: (context, index) {
+          if (index >= _currentQuizQuestions.length) {
+            print(
+                "QuizScreen: itemBuilder - index $index fora dos limites (${_currentQuizQuestions.length}). Retornando Container vazio.");
+            return Container();
+          }
+          final currentQuestion = _currentQuizQuestions[index];
+          return Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElevatedButton(
-                  onPressed: _currentQuestionIndex > 0 ? _previousQuestion : null,
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _currentQuestionIndex > 0 ? Colors.grey : Colors.grey.shade400,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
-                  child: const Text('Voltar', style: TextStyle(color: Colors.white, fontSize: 18)),
+                Text('Pergunta ${index + 1}/${_currentQuizQuestions.length}',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: [
+                    BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 1, blurRadius: 4, offset: const Offset(0, 2))
+                  ]),
+                  child: Text(currentQuestion.question, style: const TextStyle(fontSize: 22, color: Colors.black, height: 1.4)),
                 ),
-                ElevatedButton(
-                  onPressed: _isAnswered &&
-                      _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1 &&
-                      _answers.every((answer) => answer != null)
-                      ? _showResultDialog
-                      : (_isAnswered ? _nextQuestion : null),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isAnswered &&
-                        _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1 &&
-                        _answers.every((answer) => answer != null)
-                        ? const Color(0xFFEAB08A)
-                        : Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                const SizedBox(height: 25),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: currentQuestion.options.length,
+                    itemBuilder: (context, optionIndex) {
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.symmetric(vertical: 6.0),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        child: RadioListTile<int>(
+                          title: Text(currentQuestion.options[optionIndex], style: const TextStyle(fontSize: 18)),
+                          value: optionIndex,
+                          groupValue: _answers[index],
+                          activeColor: const Color(0xFFD9804E),
+                          onChanged: (_answers[index] != null)
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  _vibrationService.vibrate();
+                                  setState(() {
+                                    _answers[index] = value;
+                                    _selectedAnswer = value;
+                                  });
+                                  _canStartListeningAfterTTS = true;
+                                  _ttsService.speak("Opção ${value + 1} selecionada.").then((_) {
+                                    if (mounted) {
+                                      Future.delayed(const Duration(milliseconds: 300), () {
+                                        if (!mounted) return;
+                                        print(
+                                            "QuizScreen: Tap Answer - Processando. CurrentIndex (do PageView): $index, _currentQuestionIndex (do estado): $_currentQuestionIndex");
+                                        if (index < _currentQuizQuestions.length - 1) {
+                                          _processAnswerAndAdvance();
+                                        } else {
+                                          print(
+                                              "QuizScreen: Tap Answer - Última pergunta (idx $index) respondida. Mostrando resultados.");
+                                          _processAnswerAndShowResults();
+                                        }
+                                      });
+                                    }
+                                  });
+                                },
+                        ),
+                      );
+                    },
                   ),
-                  child: Text(
-                    _currentQuestionIndex == Questions.questionsMap[widget.insectName]!.length - 1
-                        ? 'Confirmar Respostas'
-                        : 'Próxima Pergunta',
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Voltar'),
+                      onPressed: _currentQuestionIndex > 0 ? _previousQuestion : null,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: _currentQuestionIndex > 0 ? const Color(0xFFEAB08A) : Colors.grey.shade400,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.arrow_forward),
+                      label: Text(_currentQuestionIndex == _currentQuizQuestions.length - 1 ? 'Ver Resultado' : 'Próxima'),
+                      onPressed: _answers[_currentQuestionIndex] != null
+                          ? () {
+                              print(
+                                  "QuizScreen: Botão Próxima/Resultado - CurrentIndex: $_currentQuestionIndex, TotalQuestions: ${_currentQuizQuestions.length}");
+                              if (_currentQuestionIndex == _currentQuizQuestions.length - 1) {
+                                print("QuizScreen: Botão Próxima/Resultado - Última pergunta. Mostrando resultados.");
+                                _processAnswerAndShowResults();
+                              } else {
+                                _processAnswerAndAdvance();
+                              }
+                            }
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _answers[_currentQuestionIndex] != null ? const Color(0xFFEAB08A) : Colors.grey.shade400,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

@@ -14,7 +14,7 @@ final Map<String, Insect> insectData = {
   'https://me-qr.com/0A5HBr4R': Insect(
     name: 'Escorpião',
     description:
-    'Os escorpiões, artrópodes da ordem Scorpiones, possuem corpo segmentado, pinças e cauda articulada com aguilhão venenoso. Existindo há mais de 400 milhões de anos, habitam desertos, florestas, savanas e áreas urbanas em todos os continentes, exceto na Antártica.\n'
+        'Os escorpiões, artrópodes da ordem Scorpiones, possuem corpo segmentado, pinças e cauda articulada com aguilhão venenoso. Existindo há mais de 400 milhões de anos, habitam desertos, florestas, savanas e áreas urbanas em todos os continentes, exceto na Antártica.\n'
         '\nMorfologia e Característica\n'
         'Dividem-se em prosoma (cabeça e pinças), mesossoma (abdômen) e metassoma (cauda). As pinças capturam presas e a cauda injeta veneno.\n'
         '\nHábitos e Comportamento\n'
@@ -34,7 +34,7 @@ final Map<String, Insect> insectData = {
   'https://me-qr.com/g6D9jaMj': Insect(
     name: 'Borboleta',
     description:
-    'As borboletas são insetos da ordem Lepidoptera, conhecidas por asas coloridas e ciclo de vida fascinante. São encontradas em todos os continentes, exceto na Antártica, habitando florestas, campos e áreas urbanas.\n'
+        'As borboletas são insetos da ordem Lepidoptera, conhecidas por asas coloridas e ciclo de vida fascinante. São encontradas em todos os continentes, exceto na Antártica, habitando florestas, campos e áreas urbanas.\n'
         '\nMorfologia e Características\n'
         'Possuem corpo dividido em cabeça, tórax e abdômen. Suas asas são cobertas por escamas coloridas e antenas sensíveis ao cheiro. A boca adaptada em forma de probóscide suga néctar.\n'
         '\nHábitos e Comportamento\n'
@@ -54,7 +54,7 @@ final Map<String, Insect> insectData = {
   'https://me-qr.com/8Mw6s4W6': Insect(
     name: 'Barbeiro',
     description:
-    'Os barbeiros são insetos hematófagos da ordem Hemiptera, conhecidos por serem vetores da Doença de Chagas, causada pelo protozoário Trypanosoma cruzi. São encontrados principalmente na América Latina, em ambientes rurais e urbanos.\n'
+        'Os barbeiros são insetos hematófagos da ordem Hemiptera, conhecidos por serem vetores da Doença de Chagas, causada pelo protozoário Trypanosoma cruzi. São encontrados principalmente na América Latina, em ambientes rurais e urbanos.\n'
         '\nMorfologia e Características\n'
         'Dividem-se em cabeça, tórax e abdômen. Possuem um rostro (aparelho bucal) especializado para perfurar a pele e sugar sangue. Seu corpo é achatado e de coloração escura com detalhes alaranjados ou avermelhados.\n'
         '\nHábitos e Comportamento\n'

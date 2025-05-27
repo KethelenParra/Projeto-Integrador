@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:video_player/video_player.dart';
 import 'package:vision_app_3d/screens/insect.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
-import 'package:vision_app_3d/screens/insect_list_screen.dart';
-import 'package:vision_app_3d/screens/qr_view_exemple.dart';
-import 'package:vision_app_3d/service/speechService.dart';
+import 'package:vision_app_3d/service/speech_service.dart';
+import 'package:vision_app_3d/service/tts_service.dart';
+import 'package:vision_app_3d/service/vibration_service.dart';
 import 'quiz_screen.dart';
-import 'package:vibration/vibration.dart'; // Import para vibração personalizada
 
 class InsectDetailsScreen extends StatefulWidget {
   final Insect insect;
@@ -19,41 +17,102 @@ class InsectDetailsScreen extends StatefulWidget {
   State<InsectDetailsScreen> createState() => _InsectDetailsScreenState();
 }
 
-class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
-  final FlutterTts _flutterTts = FlutterTts();
+class _InsectDetailsScreenState extends State<InsectDetailsScreen> with WidgetsBindingObserver {
+  final TtsService _ttsService = TtsService();
   late VideoPlayerController _videoController;
   final ScrollController _scrollController = ScrollController();
-  double _currentScrollPosition = 0;
   final SpeechService _speechService = SpeechService();
+  final VibrationService _vibrationService = VibrationService();
+
   bool _isListening = false;
   bool _isSpeaking = false;
-  bool _isVideoEnabled = true;
   bool _isProcessingVideoCommand = false;
   bool _shouldStartQuizAfterVideo = false;
+  bool _servicesInitialized = false;
+  bool _videoPlayerInitialized = false;
+  bool _canStartListeningAfterTTS = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    print("InsectDetailsScreen: initState for ${widget.insect.name}");
+
     _videoController = VideoPlayerController.asset(widget.insect.videoPath)
       ..initialize().then((_) {
+        if (!mounted) return;
+        print("InsectDetailsScreen: Video Player initialized for ${widget.insect.videoPath}");
+        _videoPlayerInitialized = true;
         setState(() {});
+        _videoController.addListener(_videoPlaybackListener);
+      }).catchError((error) {
+        print("InsectDetailsScreen: Erro ao inicializar VideoPlayer: $error");
+        _videoPlayerInitialized = false;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Erro ao carregar vídeo: ${error.toString()}")),
+          );
+        }
       });
 
-    _initializeServices();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_servicesInitialized) {
+        print("InsectDetailsScreen: Iniciando _initializeServices via postFrameCallback");
+        _initializeServices();
+      }
+    });
+  }
+
+  void _videoPlaybackListener() {
+    if (!mounted || !_videoPlayerInitialized || !_videoController.value.isInitialized) return;
+
+    final bool isFinished =
+        _videoController.value.position >= _videoController.value.duration && _videoController.value.duration > Duration.zero;
+
+    if (!_videoController.value.isPlaying && isFinished) {
+      print("InsectDetailsScreen: Vídeo terminou.");
+      _canStartListeningAfterTTS = true;
+
+      if (_shouldStartQuizAfterVideo) {
+        print("InsectDetailsScreen: Iniciando quiz após vídeo.");
+        _navigateToQuizView();
+        _shouldStartQuizAfterVideo = false;
+      } else {
+        print("InsectDetailsScreen: Falando instruções pós-vídeo.");
+        _ttsService.stop().then((_) {
+          if (mounted) {
+            _ttsService.speak("O vídeo terminou. Diga 'perguntas' para o quiz, ou 'voltar'.");
+          }
+        });
+      }
+    }
   }
 
   Future<void> _initializeServices() async {
+    if (_servicesInitialized || !mounted) {
+      print("InsectDetailsScreen: _initializeServices bloqueado: _servicesInitialized=$_servicesInitialized, mounted=$mounted");
+      return;
+    }
+    print("InsectDetailsScreen: Iniciando todos os serviços...");
+    _servicesInitialized = true;
+    _canStartListeningAfterTTS = false;
+
     try {
-      await _configureTTS();
+      await _checkMicrophonePermissions();
+      await _configureTts();
       await _initializeSpeechService();
-      await _speakWelcomeMessage();
+
+      if (mounted) {
+        await _speakWelcomeMessage();
+      }
     } catch (e) {
-      print("Erro na inicialização: $e");
+      print("InsectDetailsScreen: Erro na inicialização geral dos serviços: $e");
+      _servicesInitialized = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Erro ao iniciar serviços: ${e.toString()}")),
         );
-        // Tenta reiniciar após erro
+// Tenta reiniciar após erro
         await Future.delayed(const Duration(seconds: 1));
         _initializeServices();
       }
@@ -63,216 +122,286 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
   Future<void> _initializeSpeechService() async {
     bool initialized = false;
     int attempts = 0;
+    const maxAttempts = 5;
 
-    while (!initialized && attempts < 3 && mounted) {
+    while (!initialized && attempts < maxAttempts && mounted) {
       attempts++;
+      print("InsectDetailsScreen: Tentativa $attempts de inicializar SpeechService...");
       initialized = await _speechService.initialize(context: context);
-
       if (!initialized) {
-        print("Tentativa $attempts falhou - esperando para tentar novamente");
-        await Future.delayed(const Duration(milliseconds: 500));
+        print("InsectDetailsScreen: Tentativa $attempts falhou: ${_speechService.lastError}");
+        await Future.delayed(const Duration(milliseconds: 1500));
       }
     }
 
     if (!initialized && mounted) {
-      throw Exception("Não foi possível inicializar o serviço de voz após 3 tentativas");
+      print("InsectDetailsScreen: SpeechService não inicializado após $maxAttempts tentativas.");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Não foi possível iniciar o reconhecimento de voz.")),
+      );
+    } else if (initialized) {
+      print("InsectDetailsScreen: SpeechService inicializado com sucesso.");
     }
   }
 
-  Future<void> _configureTTS() async {
-    await _flutterTts.setLanguage("pt-BR");
-    await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.setVolume(1.0);
+  Future<void> _configureTts() async {
+    print("InsectDetailsScreen: Configurando TTS...");
+    await _ttsService.initialize(
+      language: "pt-BR",
+      speechRate: 0.5,
+      volume: 1.0,
+      onStart: () {
+        print("InsectDetailsScreen: TTS onStart");
+        if (mounted) {
+          setState(() => _isSpeaking = true);
+          if (_isListening) {
+            _speechService.stop();
+            setState(() => _isListening = false);
+          }
+        }
+      },
+      onComplete: () async {
+        if (!mounted) return;
+        print("InsectDetailsScreen: TTS onComplete. _canStartListeningAfterTTS: $_canStartListeningAfterTTS");
+        setState(() => _isSpeaking = false);
 
-    _flutterTts.setStartHandler(() {
-      setState(() => _isSpeaking = true);
-      if (_isListening) {
-        _speechService.stop();
-      }
-    });
+        if (_isProcessingVideoCommand ||
+            (_videoPlayerInitialized && _videoController.value.isInitialized && _videoController.value.isPlaying)) {
+          print("InsectDetailsScreen: TTS onComplete - Vídeo ou comando ativo. Não iniciando escuta.");
+          _canStartListeningAfterTTS = false;
+          return;
+        }
 
-    _flutterTts.setCompletionHandler(() async {
-      setState(() => _isSpeaking = false);
+        if (_shouldStartQuizAfterVideo) {
+          print("InsectDetailsScreen: Iniciando quiz após TTS.");
+          _navigateToQuizView();
+          _shouldStartQuizAfterVideo = false;
+          return;
+        }
 
-      if (_shouldStartQuizAfterVideo && !_isProcessingVideoCommand && !_videoController.value.isPlaying) {
-        print("Iniciando quiz após vídeo");
-        _navigateToQuizView();
-        _shouldStartQuizAfterVideo = false;
-      }
-
-      if (_isProcessingVideoCommand || _videoController.value.isPlaying) return;
-
-      if (mounted) {
-        await Future.delayed(const Duration(seconds: 1));
-        await _safeStartListening();
-      }
-    });
-
-    _flutterTts.setErrorHandler((msg) {
-      setState(() => _isSpeaking = false);
-      if (mounted && !_videoController.value.isPlaying) {
-        _startListening();
-      }
-    });
+        if (_canStartListeningAfterTTS && _speechService.isInitialized) {
+          print("InsectDetailsScreen: TTS onComplete - Iniciando escuta após delay.");
+          await Future.delayed(const Duration(milliseconds: 1000));
+          if (mounted && !_isSpeaking && !_isListening) {
+            await _safeStartListening();
+          }
+        }
+      },
+      onError: (msg) {
+        if (!mounted) return;
+        print("InsectDetailsScreen: TTS onError - $msg");
+        setState(() {
+          _isSpeaking = false;
+          _canStartListeningAfterTTS = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro no TTS: $msg")),
+        );
+        if (mounted && !_videoPlayerInitialized || !_videoController.value.isPlaying) {
+          _restartListening(delayMs: 1000);
+        }
+      },
+    );
+    print("InsectDetailsScreen: TTS configurado.");
   }
 
   Future<void> _handleVoiceCommand(String command) async {
-    if (!mounted || _isSpeaking) return;
+    if (!mounted || _isSpeaking) {
+      print("InsectDetailsScreen: Comando ignorado: _isSpeaking=$_isSpeaking, mounted=$mounted");
+      return;
+    }
 
-    final lowerCommand = command.toLowerCase().trim();
-    print("Processando comando: $lowerCommand");
-
+    print("InsectDetailsScreen: Processando comando: '$command'");
     await _speechService.stop();
-    setState(() => _isListening = false);
+    if (mounted) setState(() => _isListening = false);
+    await _ttsService.stop();
+    if (mounted) setState(() => _isSpeaking = false);
+
+    _canStartListeningAfterTTS = true;
 
     try {
+      final lowerCommand = command.toLowerCase().trim();
+
       if (_matchesCommand(lowerCommand, 'voltar')) {
-        _videoController.pause();
         await _executeCommand('Retornando para a lista de insetos', _navigateToListView);
         return;
       }
 
       if (_matchesCommand(lowerCommand, 'video')) {
-        _isProcessingVideoCommand = true;
-        await _handleVideoCommand();
+        print("InsectDetailsScreen: Comando 'video' reconhecido.");
+        if (mounted) setState(() => _isProcessingVideoCommand = true);
+        await _handleVideoActionByVoice(lowerCommand);
         return;
       }
 
-      if (_matchesCommand(lowerCommand, 'parar') && _videoController.value.isPlaying) {
-        await _executeCommand("Parando vídeo", () {
-          _videoController.pause();
-          _isProcessingVideoCommand = false;
-        });
+      if (_matchesCommand(lowerCommand, 'parar')) {
+        print("InsectDetailsScreen: Comando 'parar' reconhecido.");
+        if (_videoPlayerInitialized && _videoController.value.isInitialized && _videoController.value.isPlaying) {
+          if (mounted) setState(() => _isProcessingVideoCommand = true);
+          await _executeCommand("Parando vídeo", () {
+            if (mounted && _videoPlayerInitialized) _videoController.pause();
+          });
+        } else {
+          await _ttsService.speak("O vídeo não está tocando para ser parado.");
+        }
+        if (mounted) setState(() => _isProcessingVideoCommand = false);
         return;
       }
 
       if (_matchesCommand(lowerCommand, 'perguntas')) {
-        if (_isProcessingVideoCommand || _videoController.value.isPlaying) {
-          setState(() => _shouldStartQuizAfterVideo = true);
-          await _flutterTts.speak("Quando terminar o vídeo, iniciaremos o quiz");
+        print("InsectDetailsScreen: Comando 'perguntas' reconhecido.");
+        if (_videoPlayerInitialized && _videoController.value.isInitialized && _videoController.value.isPlaying) {
+          if (mounted) setState(() => _shouldStartQuizAfterVideo = true);
+          _canStartListeningAfterTTS = false;
+          await _ttsService.speak("O quiz iniciará após o término do vídeo.");
         } else {
           await _executeCommand('Navegando para o quiz', _navigateToQuizView);
         }
         return;
       }
 
-      await _flutterTts.speak("Comando não reconhecido. Tente dizer 'reproduzir vídeo', 'parar vídeo', 'perguntas' ou 'voltar'.");
+      print("InsectDetailsScreen: Comando não reconhecido: '$lowerCommand'");
+      await _ttsService.speak("Comando não reconhecido. Tente 'reproduzir vídeo', 'parar vídeo', 'perguntas' ou 'voltar'.");
     } catch (e) {
-      print("Erro no comando: $e");
-    } finally {
-      if (!_isVideoCommandActive && mounted && !_isSpeaking && !_videoController.value.isPlaying) {
+      print("InsectDetailsScreen: Erro ao processar comando: $e");
+      _canStartListeningAfterTTS = true;
+      if (mounted) setState(() => _isProcessingVideoCommand = false);
+      if (mounted && !_isSpeaking && !_isListening && !(_videoPlayerInitialized && _videoController.value.isPlaying)) {
         await _restartListening();
       }
     }
   }
 
-  Future<void> _stopAllAudio() async {
+  Future<void> _handleVideoActionByVoice(String command) async {
+    _canStartListeningAfterTTS = true;
     try {
-      await _flutterTts.stop();
-      await _speechService.stop();
-      setState(() {
-        _isSpeaking = false;
-        _isListening = false;
-      });
-      if (_videoController.value.isPlaying) {
-        await _videoController.pause();
-      }
-      print("All audio stopped successfully");
-    } catch (e) {
-      print("Error stopping audio: $e");
-    }
-  }
-
-  void _navigateToScreen(Widget screen) async {
-    await _stopAllAudio();
-    if (!mounted) {
-      print("Não pode navegar: widget não montado");
-      return;
-    }
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
-  }
-
-  void _navigateToQuizView() async {
-    _navigateToScreen(QuizScreen(insectName: widget.insect.name));
-    await _speechService.stop();
-  }
-
-  void _navigateToListView() async {
-    _navigateToScreen(const InsectListScreen());
-    await _speechService.stop();
-  }
-
-  bool _isVideoCommandActive = false;
-
-  Future<void> _handleVideoCommand() async {
-    try {
-      if (!_videoController.value.isInitialized) {
-        await _flutterTts.speak("O vídeo não está pronto. Tente novamente.");
-        print("Vídeo não inicializado");
+      if (!_videoPlayerInitialized || !_videoController.value.isInitialized) {
+        await _ttsService.speak("O vídeo ainda não está pronto. Aguarde.");
+        if (mounted) setState(() => _isProcessingVideoCommand = false);
         return;
       }
 
-      // Parar reconhecimento de voz antes de iniciar o vídeo
-      if (_isListening) {
-        await _speechService.stop();
-        setState(() => _isListening = false);
+      bool wasPlaying = _videoController.value.isPlaying;
+      String ttsMessage = "";
+      bool playAction = false;
+      bool pauseAction = false;
+
+      if (command.contains('reproduzir') ||
+          command.contains('play') ||
+          command.contains('iniciar') ||
+          command.contains('começar') ||
+          command.contains('tocar')) {
+        if (!wasPlaying) {
+          playAction = true;
+          ttsMessage = "Reproduzindo vídeo.";
+        } else {
+          ttsMessage = "O vídeo já está em reprodução.";
+          _canStartListeningAfterTTS = false;
+        }
+      } else if (command.contains('pausar')) {
+        if (wasPlaying) {
+          pauseAction = true;
+          ttsMessage = "Vídeo pausado.";
+        } else {
+          ttsMessage = "O vídeo já está pausado.";
+        }
+      } else {
+        if (wasPlaying) {
+          pauseAction = true;
+          ttsMessage = "Vídeo pausado.";
+        } else {
+          playAction = true;
+          ttsMessage = "Reproduzindo vídeo.";
+        }
       }
 
-      setState(() {
-        if (_videoController.value.isPlaying) {
-          _videoController.pause();
-        } else {
-          _videoController.play();
-        }
-      });
+      if (playAction) {
+        if (mounted) _videoController.play();
+        _canStartListeningAfterTTS = false;
+        print("InsectDetailsScreen: Vídeo INICIADO por comando: $command");
+      } else if (pauseAction) {
+        if (mounted) _videoController.pause();
+        print("InsectDetailsScreen: Vídeo PAUSADO por comando: $command");
+      }
 
-      await _flutterTts.awaitSpeakCompletion(true);
-      await _flutterTts.speak("Vídeo iniciado.");
-
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Listener para detectar término do vídeo
-      _videoController.addListener(() {
-        if (!_videoController.value.isPlaying && _videoController.value.position >= _videoController.value.duration) {
-          print("Vídeo terminou");
-          setState(() => _isProcessingVideoCommand = false);
-          if (_shouldStartQuizAfterVideo && mounted) {
-            _navigateToQuizView();
-            _shouldStartQuizAfterVideo = false;
-          } else {
-            // Falar a mensagem após o vídeo terminar
-            _flutterTts.stop();
-            _flutterTts.speak("Agora, diga perguntas para iniciar o quiz, ou voltar para voltar à seleção de insetos.");
-          }
-          // Reativar escuta após o vídeo terminar
-          if (mounted && !_isSpeaking) {
-            _restartListening();
-          }
-        }
-      });
+      await _ttsService.speak(ttsMessage);
+    } catch (e) {
+      print("InsectDetailsScreen: Erro em _handleVideoActionByVoice: $e");
+      _canStartListeningAfterTTS = true;
+      await _ttsService.speak("Ocorreu um erro com o vídeo.");
     } finally {
-      _isProcessingVideoCommand = false;
-      if (!_videoController.value.isPlaying && mounted && !_isSpeaking) {
+      if (mounted) setState(() => _isProcessingVideoCommand = false);
+      if (mounted && !_isSpeaking && !_videoController.value.isPlaying) {
         await _restartListening(delayMs: 1200);
       }
     }
   }
 
-  Future<void> _startQuiz() async {
-    _vibrate();
-    await _flutterTts.speak("Preparando o quiz sobre ${widget.insect.name}");
-
-    if (_videoController.value.isPlaying) {
-      _videoController.pause();
+  Future<void> _stopAllAudioAndVideo() async {
+    print("InsectDetailsScreen: Parando áudio e vídeo...");
+    _canStartListeningAfterTTS = false;
+    await _ttsService.stop();
+    await _speechService.stop();
+    if (mounted) {
+      setState(() {
+        _isSpeaking = false;
+        _isListening = false;
+      });
     }
+    if (_videoPlayerInitialized && _videoController.value.isInitialized && _videoController.value.isPlaying) {
+      await _videoController.pause();
+    }
+  }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print("InsectDetailsScreen: AppLifecycleState: $state");
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (mounted && !_servicesInitialized) {
+          print("InsectDetailsScreen: App resumido, inicializando serviços.");
+          _initializeServices();
+        } else if (mounted &&
+            _servicesInitialized &&
+            !_isListening &&
+            !_isSpeaking &&
+            !(_videoPlayerInitialized && _videoController.value.isPlaying)) {
+          print("InsectDetailsScreen: App resumido, reiniciando escuta.");
+          _canStartListeningAfterTTS = true;
+          _restartListening(delayMs: 500);
+        }
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        print("InsectDetailsScreen: App pausado/inativo, parando áudio/vídeo.");
+        _stopAllAudioAndVideo();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        break;
+    }
+  }
+
+  void _navigateToQuizView() async {
+    await _stopAllAudioAndVideo();
     if (mounted) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => QuizScreen(insectName: widget.insect.name),
-        ),
-      );
+        MaterialPageRoute(builder: (context) => QuizScreen(insectName: widget.insect.name)),
+      ).then((_) {
+        if (mounted) {
+          print("InsectDetailsScreen: Retornou do QuizScreen, reinicializando serviços.");
+          _servicesInitialized = false;
+          _initializeServices();
+        }
+      });
+    }
+  }
+
+  void _navigateToListView() async {
+    await _stopAllAudioAndVideo();
+    if (mounted) {
+      Navigator.pop(context);
     }
   }
 
@@ -321,75 +450,101 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         'começar vídeo',
         'começar video',
       ],
+      'parar': [
+        'parar',
+        'pausar',
+        'stop',
+        'pára',
+        'pare',
+        'parar vídeo',
+        'parar video',
+      ],
     };
 
     return variations[command]?.any((variant) => input.toLowerCase().contains(variant)) ?? false;
   }
 
   Future<void> _speakWelcomeMessage() async {
-    String message = "Indo para ${widget.insect.name}. "
-        "Diga 'perguntas' para iniciar o questionário, 'reproduzir video' para controlar o vídeo, ou 'voltar' para retornar.";
-    await _flutterTts.awaitSpeakCompletion(true);
-    await _flutterTts.speak(message);
+    if (!mounted) return;
+    print("InsectDetailsScreen: Falando mensagem de boas-vindas...");
+    _canStartListeningAfterTTS = true;
+    await _ttsService.speak(
+      "Detalhes sobre ${widget.insect.name}. "
+      "Diga 'perguntas' para o quiz, 'reproduzir vídeo' para o vídeo, ou 'voltar'.",
+    );
+    print("InsectDetailsScreen: Mensagem de boas-vindas enviada ao TTS.");
   }
 
   Future<void> _safeStartListening({Duration listenFor = const Duration(minutes: 10)}) async {
+    if (!mounted) {
+      print("InsectDetailsScreen: SafeStartListening - Widget não montado.");
+      return;
+    }
+    if (_isSpeaking) {
+      print("InsectDetailsScreen: SafeStartListening - TTS está falando.");
+      return;
+    }
+    if (_isListening) {
+      print("InsectDetailsScreen: SafeStartListening - Já está escutando.");
+      return;
+    }
+    if (_videoPlayerInitialized && _videoController.value.isInitialized && _videoController.value.isPlaying) {
+      print("InsectDetailsScreen: SafeStartListening - Vídeo está tocando.");
+      return;
+    }
+    if (!_speechService.isInitialized) {
+      print("InsectDetailsScreen: SafeStartListening - SpeechService não inicializado. Tentando reinicializar...");
+      await _initializeSpeechService();
+      if (!_speechService.isInitialized) {
+        print("InsectDetailsScreen: SafeStartListening - SpeechService ainda não inicializado.");
+        _canStartListeningAfterTTS = true;
+        await _ttsService.speak("Os comandos de voz não estão disponíveis. Verifique as permissões do microfone.");
+        return;
+      }
+    }
+
     try {
-      await _startListening(listenFor: listenFor); // Removido o timeout
+      print("InsectDetailsScreen: SafeStartListening - Iniciando escuta...");
+      await _startListening(listenFor: listenFor);
     } catch (e) {
       if (mounted) _handleListeningError(e);
     }
   }
 
   Future<void> _startListening({Duration listenFor = const Duration(minutes: 10)}) async {
-    if (!mounted || _isSpeaking || _isListening || _videoController.value.isPlaying) {
-      print(
-          "Não pode iniciar escuta: montado=$mounted, falando=$_isSpeaking, escutando=$_isListening, vídeo rodando=${_videoController.value.isPlaying}");
+    if (!mounted || _isSpeaking || _isListening || (_videoPlayerInitialized && _videoController.value.isPlaying)) {
+      print("InsectDetailsScreen: Não pode iniciar escuta: "
+          "mounted=$mounted, _isSpeaking=$_isSpeaking, _isListening=$_isListening, videoPlaying=${_videoController.value.isPlaying}");
       return;
     }
 
     try {
-      setState(() => _isListening = true);
-
+      if (mounted) setState(() => _isListening = true);
+      print("InsectDetailsScreen: Iniciando escuta...");
       await _speechService.listen(
         onResult: _handleVoiceCommand,
         localeId: 'pt-BR',
         listenFor: listenFor,
         pauseFor: const Duration(seconds: 10),
-        // Aumentado para 10 segundos
+        autoRestartOnNoMatch: true,
         onSoundLevelChange: (level) {
-          if (level > 0) print("Nível de som: $level");
+          if (level > 0) print("InsectDetailsScreen: Nível de som: $level");
         },
       );
+      print("InsectDetailsScreen: Escuta ativada com sucesso.");
     } catch (e) {
-      print("Erro ao iniciar escuta: $e");
-      if (mounted) {
-        setState(() => _isListening = false);
-        await _handleListeningError(e);
-      }
+      print("InsectDetailsScreen: Erro ao iniciar escuta: $e");
+      if (mounted) _handleListeningError(e);
     }
   }
 
   Future<void> _handleListeningError(dynamic error) async {
-    print("🛑 Erro no reconhecimento de voz: ${error.toString()}");
+    print("InsectDetailsScreen: Erro no reconhecimento de voz: $error");
+    if (mounted) setState(() => _isListening = false);
 
-    await _speechService.stop();
-    if (mounted) {
-      setState(() => _isListening = false);
-    }
-
-    if (error.toString().contains('error_no_match')) {
-      print("🔇 Nenhum comando reconhecido");
-      if (mounted) {
-        await _flutterTts.awaitSpeakCompletion(true);
-        await _flutterTts.speak("Não entendi. Por favor, repita o comando.");
-        await Future.delayed(const Duration(milliseconds: 1500));
-        if (mounted && !_isSpeaking) {
-          await _restartListening(delayMs: 500);
-        }
-      }
-    } else if (error.toString().contains('error_audio') || error.toString().contains('Error 7')) {
-      print("🎤 Erro no áudio (Error 7) - verificando permissões e reinicializando");
+    String errorMessage = error.toString().toLowerCase();
+    if (errorMessage.contains('error_audio') || errorMessage.contains('error 7')) {
+      print("InsectDetailsScreen: Erro no áudio.");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -400,46 +555,50 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
             ),
           ),
         );
-
-        // Tentar reinicializar o SpeechService
         await _speechService.reset();
         await _initializeSpeechService();
-
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted && !_isSpeaking && !_videoController.value.isPlaying) {
-          await _restartListening(delayMs: 1000);
-        }
       }
-    } else if (error.toString().contains('error_client') || error.toString().contains('error_busy')) {
-      print("🔄 Erro no cliente - reinicializando serviços");
+    } else if (errorMessage.contains('error_client') || errorMessage.contains('error_busy')) {
+      print("InsectDetailsScreen: Erro no cliente de reconhecimento. Reinicializando serviços.");
       if (mounted) {
+        _servicesInitialized = false;
         await _initializeServices();
+        return;
       }
-    } else {
-      print("⚠️ Erro não tratado - tentando recuperação");
+    } else if (errorMessage.contains('error_no_match')) {
+      print("InsectDetailsScreen: Nenhum comando reconhecido.");
+      if (mounted) {
+        await _ttsService.speak("Não entendi. Por favor, repita o comando.");
+      }
+    } else if (!errorMessage.contains('error_speech_timeout')) {
+      print("InsectDetailsScreen: Erro de reconhecimento não tratado: $errorMessage");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Problema temporário no reconhecimento de voz")),
         );
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted && !_isSpeaking && !_videoController.value.isPlaying) {
-          await _restartListening(delayMs: 1000);
-        }
       }
+    }
+
+    if (mounted && !_isSpeaking && !(_videoPlayerInitialized && _videoController.value.isPlaying) && !_isListening) {
+      print("InsectDetailsScreen: Tentando reiniciar escuta após erro.");
+      _canStartListeningAfterTTS = true;
+      await _restartListening(delayMs: 1500);
     }
   }
 
   Future<void> _checkMicrophonePermissions() async {
-    var status = await Permission.microphone.status;
+    var status = await ph.Permission.microphone.status;
     if (!status.isGranted) {
-      status = await Permission.microphone.request();
+      status = await ph.Permission.microphone.request();
       if (!status.isGranted && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microfone não autorizado'),
+          SnackBar(
+            content: const Text('Microfone não autorizado'),
             action: SnackBarAction(
               label: 'Configurações',
-              onPressed: openAppSettings,
+              onPressed: () {
+                ph.openAppSettings(); // Use the alias
+              },
             ),
           ),
         );
@@ -447,86 +606,98 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
     }
   }
 
-  void _toggleVideo() {
-    _vibrate();
-    setState(() {
-      if (_videoController.value.isPlaying) {
-        _videoController.pause();
-      } else {
-        _videoController.play();
-      }
-    });
-  }
-
-  Future<void> _restartListening({int delayMs = 2000, Duration listenFor = const Duration(minutes: 10)}) async {
-    if (!mounted || _isSpeaking || _videoController.value.isPlaying) {
-      print(
-          "Não pode reiniciar escuta: montado=$mounted, falando=$_isSpeaking, vídeo rodando=${_videoController.value.isPlaying}");
+  Future<void> _restartListening({int delayMs = 1000, Duration listenFor = const Duration(minutes: 10)}) async {
+    if (!mounted) {
+      print("InsectDetailsScreen: _restartListening - Widget não montado.");
+      return;
+    }
+    if (_isSpeaking || (_videoPlayerInitialized && _videoController.value.isInitialized && _videoController.value.isPlaying)) {
+      print("InsectDetailsScreen: Não pode reiniciar escuta: TTS ou vídeo ativo.");
+      _canStartListeningAfterTTS = false;
       return;
     }
 
-    try {
-      print("Preparando para reiniciar reconhecimento de voz...");
+    print("InsectDetailsScreen: Tentando reiniciar escuta em $delayMs ms...");
 
-      if (_isListening) {
-        await _speechService.stop();
-        setState(() => _isListening = false);
-      }
+    if (_isListening) {
+      await _speechService.stop();
+      if (mounted) setState(() => _isListening = false);
+    }
 
-      // Verificar permissões antes de reiniciar
-      await _checkMicrophonePermissions();
+    await _checkMicrophonePermissions();
+    await Future.delayed(Duration(milliseconds: delayMs));
 
-      await Future.delayed(Duration(milliseconds: delayMs));
-
-      if (mounted && !_isSpeaking && !_videoController.value.isPlaying) {
-        print("Iniciando nova tentativa de escuta com listenFor=${listenFor.inSeconds}s...");
-        await _safeStartListening(listenFor: listenFor);
-      }
-    } catch (e) {
-      print("Erro ao reiniciar escuta: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Problema ao ativar microfone")),
-        );
-
-        await Future.delayed(const Duration(seconds: 2)); // Aumentado para 2 segundos
-        if (mounted && !_videoController.value.isPlaying) {
-          _restartListening(delayMs: 1000, listenFor: listenFor);
-        }
-      }
+    if (mounted && !_isSpeaking && !(_videoPlayerInitialized && _videoController.value.isPlaying) && !_isListening) {
+      print("InsectDetailsScreen: Reiniciando escuta agora...");
+      await _safeStartListening(listenFor: listenFor);
+    } else {
+      print("InsectDetailsScreen: Condições para reiniciar escuta não atendidas após delay.");
     }
   }
 
-  Future<void> _executeCommand(String command, Function() action) async {
-    _vibrate();
-    await _flutterTts.speak(command);
-    await Future.delayed(const Duration(milliseconds: 800));
-    action();
+  Future<void> _executeCommand(String ttsCommand, Function() action) async {
+    _vibrationService.vibrate();
+    await _ttsService.speak(ttsCommand);
+    if (mounted) action();
   }
 
   @override
   void dispose() {
-    _flutterTts.stop();
-    _speechService.stop();
-    _videoController.pause();
+    print("InsectDetailsScreen: Disposing ${widget.insect.name}...");
+    WidgetsBinding.instance.removeObserver(this);
+    _videoController.removeListener(_videoPlaybackListener);
     _videoController.dispose();
     _scrollController.dispose();
+    _stopAllAudioAndVideo();
+    _servicesInitialized = false;
     super.dispose();
   }
 
-  // Função para acionar a vibração personalizada
-  void _vibrate() async {
-    if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: 200); // vibração de 200ms
+  Widget _buildVideoPlayerControls() {
+    if (!_videoPlayerInitialized || !_videoController.value.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
     }
+    return Center(
+      child: ElevatedButton.icon(
+        icon: Icon(_videoController.value.isPlaying ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 28),
+        label: Text(_videoController.value.isPlaying ? 'Pausar Vídeo' : 'Reproduzir Vídeo', style: const TextStyle(fontSize: 16)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _videoController.value.isPlaying ? Colors.orangeAccent : Colors.lightGreen,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        ),
+        onPressed: () {
+          if (!_videoPlayerInitialized || !_videoController.value.isInitialized) return;
+          _vibrationService.vibrate();
+          _ttsService.stop();
+          _speechService.stop();
+          if (mounted) {
+            setState(() {
+              _isSpeaking = false;
+              _isListening = false;
+              _canStartListeningAfterTTS = false;
+              if (_videoController.value.isPlaying) {
+                _videoController.pause();
+              } else {
+                _videoController.play();
+              }
+            });
+          }
+          if (!_videoController.value.isPlaying && mounted) {
+            _canStartListeningAfterTTS = true;
+            _restartListening(delayMs: 700);
+          } else if (_videoController.value.isPlaying && mounted) {
+            _canStartListeningAfterTTS = false;
+          }
+        },
+      ),
+    );
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottomAnimated() {
     if (_scrollController.hasClients) {
-      _currentScrollPosition += 30;
       _scrollController.animateTo(
-        _currentScrollPosition,
-        duration: const Duration(milliseconds: 100),
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 500),
         curve: Curves.easeOut,
       );
     }
@@ -540,15 +711,14 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         backgroundColor: const Color(0xFFEAB08A),
         title: Text(
           widget.insect.name,
-          style: const TextStyle(color: Colors.black),
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
           onPressed: () {
-            _vibrate(); // Vibração ao clicar no botão de voltar
-            _videoController.pause(); // Pausa o vídeo ao voltar
-            Navigator.pop(context);
+            _vibrationService.vibrate();
+            _navigateToListView();
           },
         ),
       ),
@@ -557,57 +727,49 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Nome do Inseto
             Text(
               widget.insect.name,
               style: const TextStyle(
-                fontSize: 24,
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 20),
-            // Vídeo
-            if (_videoController.value.isInitialized)
-              AspectRatio(
-                aspectRatio: _videoController.value.aspectRatio,
-                child: VideoPlayer(_videoController),
+            const SizedBox(height: 15),
+            if (_videoPlayerInitialized && _videoController.value.isInitialized)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: AspectRatio(
+                  aspectRatio: _videoController.value.aspectRatio,
+                  child: VideoPlayer(_videoController),
+                ),
               )
             else
-              const Center(child: CircularProgressIndicator()),
-            const SizedBox(height: 20),
-            // Botão Pause/Play com vibração para ambas ações
-            Center(
-              child: ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    if (_videoController.value.isPlaying) {
-                      _vibrate(); // Vibração ao pausar o vídeo
-                      _videoController.pause();
-                    } else {
-                      _vibrate(); // Vibração ao dar play
-                      _videoController.play();
-                    }
-                  });
-                },
-                child: Text(
-                  _videoController.value.isPlaying ? 'Pause' : 'Play',
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black12,
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: const Center(child: CircularProgressIndicator()),
                 ),
               ),
-            ),
+            const SizedBox(height: 10),
+            _buildVideoPlayerControls(),
             const SizedBox(height: 20),
-            // Descrição com fundo fixo e animação
             Container(
-              height: 300,
-              padding: const EdgeInsets.all(16.0),
+              height: 250,
+              padding: const EdgeInsets.all(12.0),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8E1),
-                borderRadius: BorderRadius.circular(10),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 4,
-                    offset: Offset(2, 2),
+                    color: Colors.grey.withOpacity(0.3),
+                    spreadRadius: 2,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -621,61 +783,45 @@ class _InsectDetailsScreenState extends State<InsectDetailsScreen> {
                       animatedTexts: [
                         TypewriterAnimatedText(
                           widget.insect.description,
-                          textStyle: const TextStyle(
+                          textStyle: TextStyle(
                             fontSize: 16,
-                            color: Colors.black,
+                            color: Colors.grey[800],
+                            height: 1.5,
                           ),
-                          speed: const Duration(milliseconds: 50),
-                          cursor: '|',
+                          speed: const Duration(milliseconds: 40),
+                          cursor: '_',
                         ),
                       ],
                       isRepeatingAnimation: false,
-                      onNextBeforePause: (index, isLast) {
-                        _scrollToBottom();
-                      },
-                      onFinished: () {
-                        if (_scrollController.hasClients) {
-                          _scrollController.animateTo(
-                            _scrollController.position.maxScrollExtent,
-                            duration: const Duration(seconds: 1),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      },
+                      onFinished: _scrollToBottomAnimated,
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 25),
             Center(
-              child: ElevatedButton(
-                onPressed: () {
-                  _vibrate(); // Vibração ao clicar no botão "Fazer Quiz"
-                  if (_videoController.value.isPlaying) {
-                    _videoController.pause();
-                  }
-                  _videoController.seekTo(Duration.zero);
-                  setState(() {
-                    _currentScrollPosition = 0;
-                  });
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => QuizScreen(insectName: widget.insect.name),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEAB08A),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                ),
-                child: const Text(
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.quiz_outlined, color: Colors.white),
+                label: const Text(
                   'Fazer Quiz',
                   style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
+                onPressed: () {
+                  _vibrationService.vibrate();
+                  _navigateToQuizView();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEAB08A),
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30.0),
+                  ),
+                  elevation: 5,
+                ),
               ),
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),

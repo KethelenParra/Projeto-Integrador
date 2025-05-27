@@ -1,8 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:vibration/vibration.dart';
-import 'package:vision_app_3d/service/speechService.dart';
+import 'package:vision_app_3d/service/speech_service.dart';
+import 'package:vision_app_3d/service/tts_service.dart'; // Importa o TtsService
+import 'package:vision_app_3d/service/vibration_service.dart'; // Importa o VibrationService
 import '../screens/qr_view_exemple.dart';
 import '../screens/insect_list_screen.dart';
 
@@ -14,8 +13,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
-  final FlutterTts _flutterTts = FlutterTts();
+  final TtsService _ttsService = TtsService(); // Usa o TtsService
   final SpeechService _speechService = SpeechService();
+  final VibrationService _vibrationService = VibrationService(); // Usa o VibrationService
   bool _isListening = false;
   bool _isSpeaking = false;
   bool _isInitialized = false;
@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _initializeVoiceFeatures() async {
     try {
       print("Inicializando voice features...");
-      await _configureTtS();
+      await _configureTts();
       bool initialized = await _speechService.initialize(context: context);
       if (!initialized) {
         print("Falha ao inicializar SpeechService: ${_speechService.lastError}");
@@ -61,35 +61,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _configureTtS() async {
+  Future<void> _configureTts() async {
     try {
-      await _flutterTts.setLanguage("pt-BR");
-      await _flutterTts.setSpeechRate(0.5);
-      await _flutterTts.setVolume(1.0);
-      _flutterTts.setStartHandler(() {
-        setState(() => _isSpeaking = true);
-        print("TTS started speaking");
-      });
-      _flutterTts.setCompletionHandler(() async {
-        setState(() => _isSpeaking = false);
-        print("TTS completed speaking");
-        if (mounted && !_isListening) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _startContinuousListeningWithRetry();
-        }
-      });
-      _flutterTts.setErrorHandler((msg) async {
-        setState(() {
-          _isSpeaking = false;
-          _isListening = false;
-        });
-        print("Erro no TTS: $msg");
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro no TTS: $msg")));
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _startContinuousListeningWithRetry();
-        }
-      });
+      await _ttsService.initialize(
+        // Usa o método initialize do TtsService
+        language: "pt-BR",
+        speechRate: 0.5,
+        volume: 1.0,
+        onComplete: () async {
+          setState(() => _isSpeaking = false);
+          print("TTS completed speaking");
+          if (mounted && !_isListening) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _startContinuousListeningWithRetry();
+          }
+        },
+        onError: (msg) async {
+          setState(() {
+            _isSpeaking = false;
+            _isListening = false;
+          });
+          print("Erro no TTS: $msg");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro no TTS: $msg")));
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _startContinuousListeningWithRetry();
+          }
+        },
+      );
     } catch (e) {
       print("Erro ao configurar TTS: $e");
     }
@@ -104,7 +103,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           "explorar e descobrir informações sobre diferentes espécies de "
           "insetos, com recursos em áudio, vídeos e através da experiência "
           "com as mãos. Viva uma experiência interessante. Diga lista para ir para a lista de insetos ou escanear para ir para a página do QR Code.";
-      await _flutterTts.speak(message);
+      await _ttsService.speak(message); // Usa o método speak do TtsService
     } catch (e) {
       print("Erro ao falar mensagem: $e");
       setState(() => _isSpeaking = false);
@@ -118,7 +117,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Falha ao iniciar reconhecimento de voz após várias tentativas.")),
         );
-        await _flutterTts.speak("Não foi possível iniciar o reconhecimento de voz. Verifique as permissões ou tente novamente.");
+        await _ttsService.speak(
+            "Não foi possível iniciar o reconhecimento de voz. Verifique as permissões ou tente novamente."); // Usa o método speak do TtsService
       }
       print("Máximo de retries atingido");
       return;
@@ -179,7 +179,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
 
       setState(() => _isListening = true);
-      _vibrate();
+      _vibrationService.vibrate(); // Usa o método vibrate do VibrationService
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Microfone ativo. Fale seu comando.")),
@@ -203,16 +203,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       if (command.isEmpty) {
         print("Comando vazio recebido, provavelmente erro no reconhecimento");
-        await _flutterTts.speak("Nenhum comando detectado. Diga lista ou escanear.");
+        await _ttsService.speak("Nenhum comando detectado. Diga lista ou escanear."); // Usa o método speak do TtsService
         _startContinuousListening();
-        _vibrate(duration: 100);
+        _vibrationService.vibrate(duration: 100); // Usa o método vibrate do VibrationService
       } else if (_matchesCommand(lowerCaseCommand, 'escanear')) {
         await _executeCommand('Direcionando para a tela de QR Code', _navigateToQRView);
       } else if (_matchesCommand(lowerCaseCommand, 'lista')) {
         await _executeCommand('Direcionando para a lista de insetos', _navigateToListView);
       } else {
-        await _flutterTts.speak("Comando não reconhecido. Diga lista ou escanear.");
-        _vibrate(duration: 100);
+        await _ttsService.speak("Comando não reconhecido. Diga lista ou escanear."); // Usa o método speak do TtsService
+        _vibrationService.vibrate(duration: 100); // Usa o método vibrate do VibrationService
       }
     } catch (e) {
       print("🔴 Erro no handleVoiceCommand: $e");
@@ -236,8 +236,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _executeCommand(String command, Function() action) async {
-    _vibrate();
-    await _flutterTts.speak(command);
+    _vibrationService.vibrate(); // Usa o método vibrate do VibrationService
+    await _ttsService.speak(command); // Usa o método speak do TtsService
     await Future.delayed(const Duration(milliseconds: 800));
     action();
   }
@@ -249,14 +249,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _navigateToQRView() => _navigateToScreen(const QRViewExample());
+
   void _navigateToListView() {
-    _vibrate();
+    _vibrationService.vibrate(); // Usa o método vibrate do VibrationService
     _navigateToScreen(const InsectListScreen());
   }
 
   Future<void> _stopAllAudio() async {
     try {
-      await _flutterTts.stop();
+      await _ttsService.stop(); // Usa o método stop do TtsService
       await _speechService.stop();
       setState(() {
         _isSpeaking = false;
@@ -265,12 +266,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       print("All audio stopped successfully");
     } catch (e) {
       print("Error stopping audio: $e");
-    }
-  }
-
-  void _vibrate({int duration = 100}) async {
-    if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: duration);
     }
   }
 
@@ -308,31 +303,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       backgroundColor: const Color(0xFFFCE6D8),
       body: Center(
         child: Padding(
-          padding: EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Spacer(),
-              CircleAvatar(
+              const Spacer(),
+              const CircleAvatar(
                 radius: 40,
                 backgroundColor: Color(0xFFEAB08A),
                 child: Icon(Icons.bug_report, size: 50, color: Color(0xFF4A4A4A)),
               ),
-              SizedBox(height: 15),
-              Text('Vision App', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('Bem-vindo', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              SizedBox(height: 15),
-              Padding(
+              const SizedBox(height: 15),
+              const Text('Vision App', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text('Bem-vindo', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 15),
+              const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   'Obrigado por utilizar o Vision App, um aplicativo dedicado'
-                      ' a promover o aprendizado sobre o mundo dos insetos de forma inclusiva, para explorar e descobrir informações sobre diferentes espécies de insetos, com recursos em áudio, vídeos e através da experiência com as mãos. Viva uma experiência interessante.',
+                  ' a promover o aprendizado sobre o mundo dos insetos de forma inclusiva, para explorar e descobrir informações sobre diferentes espécies de insetos, com recursos em áudio, vídeos e através da experiência com as mãos. Viva uma experiência interessante.',
                   style: TextStyle(fontSize: 16),
                   textAlign: TextAlign.center,
                 ),
               ),
-              Spacer(),
+              const Spacer(),
             ],
           ),
         ),
