@@ -75,6 +75,9 @@ flutter:
     - lib/assets/videos/inseto3.mp4
     - lib/assets/videos/inseto4.mp4
     - lib/assets/videos/inseto5.mp4
+    - lib/assets/videos/videocobra.mp4
+    - lib/assets/videos/videocamaleao.mp4
+    - lib/assets/videos/videomosca.mp4
 
 
   # The following line ensures that the Material Icons font is

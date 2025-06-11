@@ -279,5 +279,87 @@ class Questions {
         correctIndex: 1,
       ),
     ],
+
+    'Cobra': [
+      Question(
+        question: 'Qual é o nome popular da Subordem Serpentes?',
+        options: ['Lagartos', 'Cobras', 'Minhocas', 'Crocodilos'],
+        correctIndex: 1,
+      ),
+      Question(
+        question: 'Qual é a característica distintiva da língua das cobras?',
+        options: ['Curta e grossa', 'Bífida (dupla)', 'Com dentes', 'Com pelos'],
+        correctIndex: 1,
+      ),
+      Question(
+        question: 'Como as cobras se defendem da maioria das pragas?',
+        options: ['Pondo ovos', 'Troca periódica da pele (ecdises)', 'Se escondendo', 'Comendo insetos'],
+        correctIndex: 1,
+      ),
+      Question(
+        question: 'Que tipo de veneno a cascavel possui?',
+        options: ['Citotóxico', 'Hemotóxico', 'Neurotóxico', 'Cardiotóxico'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Qual é a maior serpente do mundo em massa, nativa do Brasil?',
+        options: ['Jiboia', 'Coral-verdadeira', 'Jararaca', 'Sucuri'],
+        correctIndex: 3,
+      ),
+    ],
+    'Camaleão': [
+      Question(
+        question: 'Qual é a principal característica dos camaleões?',
+        options: ['Voar', 'Correr rápido', 'Mudar de cor', 'Cavar túneis'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'O que permite que os olhos do camaleão se movam independentemente?',
+        options: ['Músculos fracos', 'Articulações especiais', 'Visão monocular', 'Flexibilidade das pálpebras'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Qual o comprimento da língua do camaleão em relação ao seu corpo?',
+        options: ['Metade do corpo', 'Igual ao corpo', 'Até 1.5 vezes o corpo', 'Duas vezes o corpo'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Além da camuflagem, para que mais os camaleões mudam de cor?',
+        options: ['Para caçar', 'Para se esconder de predadores', 'Para regulação da temperatura e comunicação social', 'Para beber água'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Qual é o principal item da dieta dos camaleões?',
+        options: ['Plantas', 'Frutas', 'Pequenos mamíferos', 'Insetos'],
+        correctIndex: 3,
+      ),
+    ],
+    'Mosca': [
+      Question(
+        question: 'O que significa o nome da ordem das moscas, "Diptera"?',
+        options: ['Quatro asas', 'Duas patas', 'Duas asas', 'Seis patas'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Qual é a função dos halteres nas moscas?',
+        options: ['Capturar presas', 'Ajudar no equilíbrio', 'Produzir som', 'Sentir o cheiro'],
+        correctIndex: 1,
+      ),
+      Question(
+        question: 'Como é o aparelho bucal da mosca?',
+        options: ['Com presas', 'Adaptado para morder', 'Adaptado para sugar ou lamber', 'Com garras'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Qual das seguintes espécies de mosca é amplamente utilizada em pesquisas científicas?',
+        options: ['Mosca-doméstica', 'Mosca-varejeira', 'Mosca-da-fruta', 'Mosca-dos-cavalos'],
+        correctIndex: 2,
+      ),
+      Question(
+        question: 'Além de decompositoras, qual outro papel ecológico importante muitas moscas desempenham?',
+        options: ['Predadoras de mamíferos', 'Polinizadoras', 'Produtoras de seda', 'Construtoras de ninhos'],
+        correctIndex: 1,
+      ),
+    ],
   };
 }

@@ -147,7 +147,7 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
     }
     print("InsectListScreen: Falando instrução...");
     await _ttsService.speak(
-      "Fale o nome de um inseto para ver mais informações. Diga claramente: Escorpião, Borboleta, Barbeiro, Abelha ou Aranha. "
+      "Fale o nome de um inseto para ver mais informações. Diga claramente: Escorpião, Borboleta, Barbeiro, Abelha, Aranha, Cobra, Camaleão ou Mosca. "
       "Diga Voltar para retornar a tela inicial",
     );
     print("InsectListScreen: Instrução enviada ao TTS.");
@@ -383,6 +383,15 @@ class _InsectListScreenState extends State<InsectListScreen> with WidgetsBinding
         'aranya',
         'araniha',
         'aranah'
+      },
+      'cobra': {
+        'cobra'
+      },
+      'camaleao': {
+        'camaleao'
+      },
+      'mosca': {
+        'mosca'
       },
       'voltar': {
         'voltar',

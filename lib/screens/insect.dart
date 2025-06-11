@@ -117,4 +117,76 @@ final Map<String, Insect> insectData = {
         ' 3. Suas presas são capazes de perfurar a pele, mas a mordida geralmente é comparada a uma picada de abelha.',
     videoPath: 'lib/assets/videos/inseto5.mp4',
   ),
+  'https://qr.me-qr.com/iDt2AJxW': Insect(
+    name: 'Cobra',
+    description: 'Serpentes (Subordem Serpentes)\n'
+        'As serpentes, popularmente conhecidas como cobras, são répteis fascinantes e diversificados, encontrados em quase todos os ecossistemas do planeta, exceto em regiões polares muito frias. No Brasil, a riqueza de espécies é imensa, com cobras de hábitos variados, desde as arborícolas até as aquáticas e fossoriais.\n'
+        '\nMorfologia e Características\n'
+        'As cobras são caracterizadas por seus corpos alongados e cilíndricos, desprovidos de membros. Sua pele é coberta por escamas, que variam em tamanho, forma e coloração, conferindo-lhes padrões únicos e camuflagem. Possuem uma língua bífida (dupla) que utilizam para coletar partículas do ar e do solo, enviando-as a um órgão sensorial especializado no céu da boca (órgão de Jacobson ou vomeronasal), o que lhes permite "cheirar" o ambiente. Muitas espécies venenosas possuem glândulas de veneno e dentes especializados (presas) para inocular sua peçonha.\n'
+        '\nHábitos e Comportamento\n'
+        'A maioria das cobras é solitária e tem hábitos predadores. Sua dieta varia amplamente e inclui roedores, aves, ovos, anfíbios, peixes, outras cobras e até mesmo insetos. Elas caçam por emboscada ou perseguição. O comportamento varia muito entre as espécies: algumas são diurnas, outras noturnas; algumas são terrestres, outras passam a maior parte do tempo em árvores ou na água. Todas as cobras realizam a ecdise, a troca periódica da pele, que é essencial para o crescimento e a remoção de parasitas.\n'
+        '\nReprodução e Ciclo de Vida\n'
+        'As cobras podem apresentar diferentes estratégias reprodutivas. Algumas são ovíparas, pondo ovos que se desenvolvem fora do corpo da fêmea (ex: jiboia, sucuri). Outras são ovovivíparas, onde os ovos eclodem dentro do corpo da mãe, e os filhotes nascem vivos, mas sem conexão placentária (ex: cascavel, jararaca). Mais raramente, algumas são vivíparas, com o desenvolvimento dos filhotes dependendo de uma placenta verdadeira. A longevidade varia muito entre as espécies, podendo ir de poucos anos a mais de 30 anos em cativeiro.\n'
+        '\nImportância Ecológica\n'
+        'As cobras desempenham um papel crucial nos ecossistemas como predadores e presas. Elas ajudam a controlar populações de roedores e outras pragas, prevenindo surtos de doenças e danos à agricultura. Além disso, o estudo do veneno de serpentes tem grande importância biomédica, sendo utilizado na produção de soros antiofídicos e na pesquisa de novos medicamentos, como anticoagulantes e analgésicos.\n'
+        '\nEspécies Brasileiras Notáveis\n'
+        '- Jiboia (Boa constrictor): Não-peçonhenta, comum em diversas regiões, se alimenta de mamíferos e aves.\n'
+        '- Sucuri (Eunectes murinus): Não-peçonhenta, a maior serpente do mundo em massa, habita áreas aquáticas da Amazônia e Pantanal.\n'
+        '- Jararaca (Bothrops jararaca): Peçonhenta, uma das maiores causas de acidentes ofídicos no Brasil, seu veneno causa dor e inchaço.\n'
+        '- Cascavel (Crotalus durissus): Peçonhenta, facilmente reconhecível pelo chocalho na cauda, seu veneno neurotóxico afeta o sistema nervoso.\n'
+        '- Coral-verdadeira (Micrurus spp.): Peçonhenta, veneno neurotóxico e muito potente, possui anéis coloridos e padrão característico (vermelho-preto-amarelo/branco).\n'
+        '\nCuriosidades\n'
+        ' 1. As cobras não possuem pálpebras; seus olhos são protegidos por uma escama transparente.\n'
+        ' 2. Elas conseguem engolir presas muito maiores que a sua cabeça devido à mandíbula desarticulável e à grande elasticidade do corpo.\n'
+        ' 3. Nem toda cobra é peçonhenta. No Brasil, a grande maioria das espécies é inofensiva para humanos.\n'
+        ' 4. A cor e os padrões das cobras são frequentemente usados para camuflagem, ajudando-as a se esconder de predadores e presas.',
+    videoPath: 'lib/assets/videos/videocobra.mp4',
+  ),
+  'https://qr.me-qr.com/yPkIenuZ': Insect(
+    name: 'Camaleão',
+    description: 'Camaleões (Família Chamaeleonidae)\n'
+        'Os camaleões são répteis da ordem Squamata, conhecidos por sua habilidade extraordinária de mudar de cor, seus olhos que se movem independentemente e sua língua longa e pegajosa. São nativos da África, Madagascar, sul da Europa e algumas partes da Ásia. Existem cerca de 200 espécies, variando em tamanho e habitats.\n'
+        '\nMorfologia e Características\n'
+        'O corpo do camaleão é lateralmente comprimido e possui uma crista dorsal ou capacete em algumas espécies. Sua pele é composta por células especiais chamadas cromatóforos, que contêm pigmentos e permitem a rápida mudança de cor e padrão. Essa mudança não é apenas para camuflagem, mas também para comunicação social, regulação da temperatura e resposta ao estresse. Seus olhos, que podem girar 360 graus independentemente um do outro, oferecem um campo de visão amplo e preciso. A língua, que pode ser até 1.5 vezes o comprimento do seu corpo, é disparada com uma velocidade impressionante para capturar presas.\n'
+        '\nHábitos e Comportamento\n'
+        'Os camaleões são principalmente arbóreos, vivendo em árvores e arbustos. São predadores diurnos e se alimentam principalmente de insetos, como grilos, gafanhotos e moscas, embora espécies maiores possam comer pequenos vertebrados. Movem-se lentamente, balançando o corpo, imitando o movimento de folhas ao vento, o que os ajuda na camuflagem. São animais solitários e territoriais, exibindo cores vibrantes e posturas de ameaça para afastar rivais.\n'
+        '\nReprodução e Ciclo de Vida\n'
+        'A maioria das espécies de camaleões é ovípara. A fêmea cava um buraco no solo para depositar os ovos, que podem levar vários meses para eclodir. Algumas espécies são ovovivíparas, com os filhotes nascendo vivos. O ciclo de vida varia entre as espécies, mas muitos camaleões têm uma expectativa de vida relativamente curta na natureza, geralmente entre 1 a 5 anos, embora algumas espécies maiores possam viver mais.\n'
+        '\nImportância Ecológica\n'
+        'Como predadores de insetos, os camaleões contribuem para o controle de populações de pragas em seus ecossistemas. Eles são um indicador da saúde do habitat e são frequentemente usados como modelos de estudo para pesquisas sobre visão e biomecânica da língua.\n'
+        '\nEspécies Notáveis\n'
+        '- Camaleão-velado (Chamaeleo calyptratus): Popular como animal de estimação devido ao seu capacete distintivo e cores vibrantes, nativo do Iêmen e Arábia Saudita.\n'
+        '- Camaleão-pantera (Furcifer pardalis): Conhecido por suas cores espetaculares e variações geográficas de cor (morfs), encontrado em Madagascar.\n'
+        '- Camaleão-comum (Chamaeleo chamaeleon): A espécie mais amplamente distribuída na Europa, África do Norte e Oriente Médio.\n'
+        '\nCuriosidades\n'
+        ' 1. A mudança de cor do camaleão não é apenas para camuflagem, mas também para expressar seu humor, temperatura corporal e intenções reprodutivas.\n'
+        ' 2. Seus olhos se movem independentemente, permitindo que o camaleão observe duas direções diferentes ao mesmo tempo.\n'
+        ' 3. A língua do camaleão pode se estender até o dobro do comprimento do seu corpo em milissegundos para capturar presas.\n'
+        ' 4. Eles não possuem ouvidos externos e se comunicam principalmente através de sinais visuais.',
+    videoPath: 'lib/assets/videos/videocamaleao.mp4',
+  ),
+  'https://qr.me-qr.com/PnFKnwoz': Insect(
+    name: 'Mosca',
+    description: 'Moscas (Ordem Diptera)\n'
+        'As moscas são insetos que pertencem à ordem Diptera, que significa "duas asas", pois possuem apenas um par de asas funcionais (as asas posteriores são modificadas em halteres, que ajudam no equilíbrio). São um dos grupos de insetos mais diversos e abundantes do planeta, com mais de 160.000 espécies descritas, habitando praticamente todos os ambientes terrestres.\n'
+        '\nMorfologia e Características\n'
+        'O corpo de uma mosca é dividido em cabeça, tórax e abdômen. Na cabeça, destacam-se os grandes olhos compostos, que proporcionam uma visão de quase 360 graus, e as antenas, que variam em forma e tamanho dependendo da espécie, sendo importantes para o olfato. O aparelho bucal é adaptado para sugar ou lamber, não para morder, e sua alimentação inclui líquidos, matéria orgânica em decomposição, néctar e sangue. O tórax possui as asas membranosas e três pares de pernas.\n'
+        '\nHábitos e Comportamento\n'
+        'As moscas apresentam uma ampla variedade de hábitos. Muitas espécies são saprófagas, alimentando-se de matéria orgânica em decomposição (frutas, fezes, carcaças), o que as torna importantes decompositoras no ecossistema. Outras são predadoras, parasitoides ou vetores de doenças. Possuem um ciclo de vida completo (metamorfose completa), passando pelas fases de ovo, larva (verme), pupa e adulto. A maioria das moscas adultas vive por um curto período, geralmente de algumas semanas a alguns meses, período durante o qual se reproduzem intensamente.\n'
+        '\nReprodução e Ciclo de Vida\n'
+        'A reprodução das moscas é geralmente sexual, com a fêmea depositando ovos em locais apropriados para o desenvolvimento das larvas, como matéria orgânica em decomposição, corpos de água ou tecidos de hospedeiros (no caso de moscas parasitas). As larvas crescem rapidamente, passando por diversas mudas até se transformarem em pupas. Dentro da pupa, ocorre a metamorfose para a fase adulta, que então emerge para se reproduzir e dar continuidade ao ciclo.\n'
+        '\nImportância Ecológica e Econômica\n'
+        'As moscas desempenham múltiplos papéis. Muitas são polinizadoras, auxiliando na reprodução de plantas. Outras são importantes no controle biológico de pragas, pois suas larvas podem ser predadoras ou parasitoides de outros insetos. No entanto, muitas espécies são consideradas pragas, transmitindo doenças (como febre tifoide, cólera, disenteria) para humanos e animais, e causando prejuízos em lavouras e na pecuária. A mosca-das-frutas, por exemplo, é uma praga agrícola significativa.\n'
+        '\nEspécies Comuns\n'
+        '- Mosca-doméstica (Musca domestica): A espécie mais conhecida, presente em ambientes humanos e vetor de diversas doenças.\n'
+        '- Mosca-da-fruta (Drosophila melanogaster): Muito utilizada em pesquisas científicas devido ao seu curto ciclo de vida e fácil manejo.\n'
+        '- Mosca-varejeira (Chrysomya megacephala): Comum em carcaças e lixo, importante na decomposição e também vetor de patógenos.\n'
+        '- Mosca-dos-cavalos (Tabanus spp.): Conhecidas por suas picadas dolorosas e pela transmissão de doenças em animais.\n'
+        '\nCuriosidades\n'
+        ' 1. As moscas possuem uma incrível capacidade de voo e manobras, graças aos seus halteres.\n'
+        ' 2. Algumas moscas conseguem pousar de cabeça para baixo em superfícies lisas usando pequenas almofadas pegajosas em suas patas.\n'
+        ' 3. A mosca-doméstica pode voar a uma velocidade de até 8 km/h e bater suas asas cerca de 200 vezes por segundo.\n'
+        ' 4. Existem moscas que imitam abelhas ou vespas para se proteger de predadores.',
+    videoPath: 'lib/assets/videos/videomosca.mp4',
+  ),
 };
